@@ -20,6 +20,5 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Animación de carga de gráficos
     console.log('🚀 Encuestas Platform cargada correctamente');
 });

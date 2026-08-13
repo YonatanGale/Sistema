@@ -1,19 +1,13 @@
 <?php
 // public/index.php - Front Controller
 
-// Cargar configuración
 require_once __DIR__ . '/../app/config/database.php';
 require_once __DIR__ . '/../app/helpers/functions.php';
-
-// Cargar controladores
 require_once __DIR__ . '/../app/controllers/AuthController.php';
 require_once __DIR__ . '/../app/controllers/EncuestaController.php';
 require_once __DIR__ . '/../app/controllers/DashboardController.php';
-
-// Cargar router
 require_once __DIR__ . '/../app/Router.php';
 
-// Inicializar router
 $router = new Router();
 
 // Definir rutas
@@ -32,6 +26,5 @@ $router->add('GET', '/analizar-encuesta', 'analizarEncuesta');
 $router->add('POST', '/cargar-respuestas', 'cargarRespuestas');
 $router->add('GET', '/api/stats', 'apiStats');
 
-// Ejecutar router
 $router->run();
 ?>

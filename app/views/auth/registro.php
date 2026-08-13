@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Registro - Encuestas Platform</title>
+    <title>Registro - <?= APP_NAME ?></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="/Sistema/public/css/style.css">
+    <link rel="stylesheet" href="<?= url('css/style.css') ?>">
 </head>
 <body class="bg-light">
     <div class="container">
@@ -23,7 +23,7 @@
                             </div>
                         <?php endif; ?>
                         
-                        <form method="POST" action="/Sistema/public/registro">
+                        <form method="POST" action="<?= url('registro') ?>">
                             <div class="mb-3">
                                 <label for="nombre" class="form-label">Nombre Completo</label>
                                 <input type="text" class="form-control" id="nombre" name="nombre" required>
@@ -43,7 +43,7 @@
                             <button type="submit" class="btn btn-primary w-100">Registrarse</button>
                         </form>
                         <div class="text-center mt-3">
-                            <a href="/Sistema/public/login">¿Ya tienes cuenta? Inicia Sesión</a>
+                            <a href="<?= url('login') ?>">¿Ya tienes cuenta? Inicia Sesión</a>
                         </div>
                     </div>
                 </div>
@@ -51,5 +51,6 @@
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="<?= url('js/main.js') ?>"></script>
 </body>
 </html>

@@ -3,7 +3,6 @@
 
 require_once __DIR__ . '/../config/config.php';
 
-// Función para sanitizar datos
 function sanitize($data) {
     if (is_array($data)) {
         return array_map('sanitize', $data);
@@ -14,20 +13,17 @@ function sanitize($data) {
     return $data;
 }
 
-// Función para generar URL amigable (dinámica)
 function url($path = '') {
     $baseUrl = rtrim(BASE_URL, '/');
     $path = ltrim($path, '/');
     return $baseUrl . '/' . $path;
 }
 
-// Función para redireccionar
 function redirect($path = '') {
     header('Location: ' . url($path));
     exit();
 }
 
-// Función para mostrar mensajes flash
 function setFlash($tipo, $mensaje) {
     $_SESSION['flash'] = [
         'tipo' => $tipo,
@@ -44,12 +40,10 @@ function getFlash() {
     return null;
 }
 
-// Función para validar email
 function isValidEmail($email) {
     return filter_var($email, FILTER_VALIDATE_EMAIL);
 }
 
-// Función para generar token CSRF
 function generateCSRFToken() {
     if (empty($_SESSION['csrf_token'])) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -61,7 +55,6 @@ function verifyCSRFToken($token) {
     return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
 }
 
-// Función para subir archivos
 function uploadFile($file, $targetDir = null) {
     if ($targetDir === null) {
         $targetDir = UPLOAD_PATH;
@@ -74,7 +67,6 @@ function uploadFile($file, $targetDir = null) {
     $fileName = time() . '_' . basename($file['name']);
     $targetFile = $targetDir . '/' . $fileName;
     
-    // Validar tipo de archivo
     $allowedTypes = ['xlsx', 'xls', 'csv', 'txt', 'json'];
     $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
     
@@ -89,7 +81,6 @@ function uploadFile($file, $targetDir = null) {
     return ['error' => 'Error al subir el archivo'];
 }
 
-// Función para debug (solo en desarrollo)
 function debug($data) {
     if (APP_ENV === 'development') {
         echo '<pre>';
@@ -98,9 +89,7 @@ function debug($data) {
     }
 }
 
-// Función para generar slug
 function slugify($text) {
-    // Reemplazar caracteres especiales
     $text = preg_replace('~[^\pL\d]+~u', '-', $text);
     $text = iconv('utf-8', 'us-ascii//TRANSLIT', $text);
     $text = preg_replace('~[^-\w]+~', '', $text);

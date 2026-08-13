@@ -5,7 +5,6 @@ class Router {
     private $routes = [];
     
     public function add($method, $route, $action) {
-        // Convertir la ruta a expresión regular
         $route = preg_replace('/\//', '\\/', $route);
         $route = '/^' . $route . '$/i';
         
@@ -19,7 +18,6 @@ class Router {
         $requestMethod = $_SERVER['REQUEST_METHOD'];
         $requestUri = strtok($_SERVER['REQUEST_URI'], '?');
         
-        // Remover la base path de la URL
         $basePath = dirname($_SERVER['SCRIPT_NAME']);
         if ($basePath !== '/') {
             $requestUri = str_replace($basePath, '', $requestUri);
@@ -38,7 +36,6 @@ class Router {
             }
         }
         
-        // Ruta no encontrada
         header('HTTP/1.0 404 Not Found');
         echo 'Página no encontrada';
     }
@@ -49,7 +46,6 @@ class Router {
             return;
         }
         
-        // Manejar acciones específicas
         switch ($action) {
             case 'home':
                 $controller = new DashboardController();

@@ -33,8 +33,7 @@ class AuthController {
                 redirect('login');
             }
         } else {
-            // Mostrar formulario de login
-            require_once '../app/views/auth/login.php';
+            require_once __DIR__ . '/../views/auth/login.php';
         }
     }
     
@@ -52,7 +51,6 @@ class AuthController {
             $password = $_POST['password'] ?? '';
             $confirm_password = $_POST['confirm_password'] ?? '';
             
-            // Validaciones
             $errores = [];
             if (strlen($nombre) < 3) $errores[] = 'El nombre debe tener al menos 3 caracteres';
             if (!isValidEmail($email)) $errores[] = 'Email inválido';
@@ -66,7 +64,6 @@ class AuthController {
             
             $conn = getConnection();
             
-            // Verificar si el email ya existe
             $sql = "SELECT id FROM usuarios WHERE email = ?";
             $stmt = $conn->prepare($sql);
             $stmt->execute([$email]);
@@ -75,10 +72,8 @@ class AuthController {
                 redirect('registro');
             }
             
-            // Hash de la contraseña
             $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
             
-            // Insertar usuario
             $sql = "INSERT INTO usuarios (nombre, email, password, rol) VALUES (?, ?, ?, 'lector')";
             $stmt = $conn->prepare($sql);
             $stmt->execute([$nombre, $email, $hashedPassword]);
@@ -86,7 +81,7 @@ class AuthController {
             setFlash('success', 'Usuario registrado exitosamente. Ahora puedes iniciar sesión.');
             redirect('login');
         } else {
-            require_once '../app/views/auth/registro.php';
+            require_once __DIR__ . '/../views/auth/registro.php';
         }
     }
 }
