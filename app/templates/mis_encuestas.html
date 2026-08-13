@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mis Encuestas - Sistema de Encuestas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-clipboard-data"></i> Sistema de Encuestas
+            </a>
+            <div class="navbar-nav ms-auto">
+                <span class="navbar-text me-3">Bienvenido, {{ current_user.username }}</span>
+                <a href="{{ url_for('encuestas.crear_encuesta') }}" class="btn btn-success me-2">
+                    <i class="bi bi-plus-circle"></i> Nueva Encuesta
+                </a>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-light">
+                    <i class="bi bi-box-arrow-right"></i> Cerrar Sesión
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col">
+                <h1 class="mb-4">
+                    <i class="bi bi-list-ul text-primary"></i> Mis Encuestas
+                </h1>
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                {% if encuestas %}
+                    <div class="row">
+                        {% for encuesta in encuestas %}
+                        <div class="col-md-6 col-lg-4 mb-4">
+                            <div class="card shadow h-100">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <span class="badge bg-{{ 'success' if encuesta.estado == 'activa' else 'secondary' }}">
+                                        {{ encuesta.estado|title }}
+                                    </span>
+                                    <small class="text-muted">{{ encuesta.fecha_creacion.strftime('%d/%m/%Y') }}</small>
+                                </div>
+                                <div class="card-body">
+                                    <h5 class="card-title">{{ encuesta.titulo }}</h5>
+                                    <p class="card-text text-muted small">
+                                        {{ encuesta.descripcion or 'Sin descripción' }}
+                                    </p>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="badge bg-info">
+                                            <i class="bi bi-question-circle"></i> {{ encuesta.preguntas|length }} preguntas
+                                        </span>
+                                        <span class="badge bg-secondary">
+                                            <i class="bi bi-check-circle"></i> 0 respuestas
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="card-footer bg-transparent">
+                                    <div class="btn-group w-100" role="group">
+                                        <a href="#" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-eye"></i> Ver
+                                        </a>
+                                        <a href="#" class="btn btn-sm btn-outline-success">
+                                            <i class="bi bi-pencil"></i> Editar
+                                        </a>
+                                        <a href="#" class="btn btn-sm btn-outline-danger" 
+                                           onclick="eliminarEncuesta({{ encuesta.id }})">
+                                            <i class="bi bi-trash"></i> Eliminar
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-clipboard-data" style="font-size: 4rem; color: #ccc;"></i>
+                        <h3 class="mt-3">No tienes encuestas creadas</h3>
+                        <p class="text-muted">Comienza creando tu primera encuesta</p>
+                        <a href="{{ url_for('encuestas.crear_encuesta') }}" class="btn btn-primary btn-lg">
+                            <i class="bi bi-plus-circle"></i> Crear Encuesta
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function eliminarEncuesta(encuestaId) {
+            if (confirm('¿Estás seguro de eliminar esta encuesta? Se eliminarán todas las preguntas y respuestas.')) {
+                fetch('/encuesta/' + encuestaId + '/eliminar', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token() }}'
+                    }
+                }).then(response => {
+                    if (response.ok) {
+                        location.reload();
+                    } else {
+                        alert('Error al eliminar la encuesta');
+                    }
+                });
+            }
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

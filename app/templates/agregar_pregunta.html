@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agregar Pregunta - {{ encuesta.titulo }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-clipboard-data"></i> Sistema de Encuestas
+            </a>
+            <div class="navbar-nav ms-auto">
+                <span class="navbar-text me-3">Encuesta: {{ encuesta.titulo }}</span>
+                <a href="{{ url_for('encuestas.mis_encuestas') }}" class="btn btn-outline-light me-2">
+                    <i class="bi bi-list-ul"></i> Mis Encuestas
+                </a>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-light">
+                    <i class="bi bi-box-arrow-right"></i> Cerrar Sesión
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-lg-10 mx-auto">
+                <!-- Progreso -->
+                <div class="card shadow mb-4">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h5 class="mb-0">
+                                    <i class="bi bi-file-earmark-text text-primary"></i>
+                                    {{ encuesta.titulo }}
+                                </h5>
+                                <small class="text-muted">{{ encuesta.descripcion or 'Sin descripción' }}</small>
+                            </div>
+                            <div>
+                                <span class="badge bg-success">Preguntas: {{ encuesta.preguntas|length }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lista de preguntas existentes -->
+                {% if encuesta.preguntas %}
+                <div class="card shadow mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0"><i class="bi bi-list-check"></i> Preguntas Agregadas</h5>
+                    </div>
+                    <div class="card-body">
+                        {% for pregunta in encuesta.preguntas|sort(attribute='orden') %}
+                        <div class="d-flex justify-content-between align-items-start p-2 border-bottom">
+                            <div>
+                                <span class="badge bg-secondary me-2">{{ loop.index }}</span>
+                                <span class="fw-bold">{{ pregunta.texto }}</span>
+                                <br>
+                                <small class="text-muted">
+                                    <i class="bi bi-tag"></i> {{ pregunta.tipo|replace('_', ' ')|title }}
+                                    {% if pregunta.requerida %}<span class="badge bg-danger ms-2">Requerida</span>{% endif %}
+                                </small>
+                            </div>
+                            <div>
+                                <span class="badge bg-info">{% if pregunta.opciones %}{{ pregunta.opciones|length }} opciones{% endif %}</span>
+                                <button type="button" class="btn btn-sm btn-danger" 
+                                        onclick="eliminarPregunta({{ pregunta.id }})">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Formulario para nueva pregunta -->
+                <div class="card shadow">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="bi bi-plus-circle"></i> Agregar Nueva Pregunta</h5>
+                    </div>
+                    <div class="card-body">
+                        {% with messages = get_flashed_messages(with_categories=true) %}
+                            {% if messages %}
+                                {% for category, message in messages %}
+                                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                                {% endfor %}
+                            {% endif %}
+                        {% endwith %}
+
+                        <form method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="mb-3">
+                                <label for="texto" class="form-label fw-bold">Texto de la Pregunta</label>
+                                <input type="text" class="form-control" id="texto" name="texto" 
+                                       placeholder="Escribe tu pregunta aquí..." required>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="tipo" class="form-label fw-bold">Tipo de Pregunta</label>
+                                <select class="form-select" id="tipo" name="tipo" required>
+                                    <option value="">Selecciona un tipo...</option>
+                                    <option value="opcion_unica">Opción Única (Radio)</option>
+                                    <option value="opcion_multiple">Opción Múltiple (Checkbox)</option>
+                                    <option value="escala_likert">Escala Likert</option>
+                                    <option value="seleccion_si_no">Sí / No</option>
+                                    <option value="texto_libre">Texto Libre</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="ayudante" class="form-label">Texto de Ayuda (opcional)</label>
+                                <input type="text" class="form-control" id="ayudante" name="ayudante" 
+                                       placeholder="Ayuda adicional para el encuestado...">
+                            </div>
+
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" class="form-check-input" id="requerida" name="requerida" checked>
+                                <label class="form-check-label" for="requerida">Pregunta requerida</label>
+                            </div>
+
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <a href="{{ url_for('encuestas.mis_encuestas') }}" class="btn btn-secondary">
+                                        <i class="bi bi-check-all"></i> Finalizar Encuesta
+                                    </a>
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-plus-circle"></i> Agregar Pregunta
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function eliminarPregunta(preguntaId) {
+            if (confirm('¿Estás seguro de eliminar esta pregunta?')) {
+                fetch('/pregunta/' + preguntaId + '/eliminar', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token() }}'
+                    }
+                }).then(response => {
+                    if (response.ok) {
+                        location.reload();
+                    } else {
+                        alert('Error al eliminar la pregunta');
+                    }
+                });
+            }
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
