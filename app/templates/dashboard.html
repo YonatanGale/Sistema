@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Sistema de Encuestas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">Sistema de Encuestas</a>
+            <div class="navbar-nav ms-auto">
+                <span class="navbar-text me-3">Bienvenido, {{ current_user.username }}</span>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-light">Cerrar Sesión</a>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col">
+                <h1>Dashboard</h1>
+                <p class="lead">Aquí empezaremos a construir la funcionalidad de encuestas.</p>
+                <div class="alert alert-info">
+                    <h5>Próximos pasos:</h5>
+                    <ul>
+                        <li>Crear formulario de encuestas</li>
+                        <li>Cargar preguntas y opciones</li>
+                        <li>Cargar respuestas</li>
+                        <li>Análisis de datos</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
