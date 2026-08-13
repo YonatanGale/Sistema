@@ -1,3 +1,0 @@
-# Redirigir todo a public/
-RewriteEngine On
-RewriteRule ^(.*)$ public/$1 [L]
