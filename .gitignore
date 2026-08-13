@@ -1,28 +1,28 @@
-XAMPP
+# XAMPP
 vendor/
 composer.lock
 
-Python
-pycache/
-.pyc
+# Python
+__pycache__/
+*.pyc
 python-scripts/venv/
 python-scripts/env/
-python-scripts/pycache/
+python-scripts/__pycache__/
 
-Uploads
-public/uploads/
+# Uploads
+public/uploads/*
 
-Config
+# Config
 app/config/config.local.php
 
-IDE
+# IDE
 .vscode/
 .idea/
 
-OS
+# OS
 .DS_Store
 Thumbs.db
 desktop.ini
 
-Logs
+# Logs
 *.log
