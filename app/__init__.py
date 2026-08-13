@@ -9,7 +9,11 @@ login_manager = LoginManager()
 def create_app():
     app = Flask(__name__)
     app.config['SECRET_KEY'] = 'tu-clave-secreta-aqui-cambiala'
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///encuesta.db'
+    
+    # CONFIGURACIÓN PARA MYSQL CON PHPMyAdmin
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:@localhost/sistema_encuestas'
+    # Si tienes contraseña: mysql+pymysql://root:tu_contraseña@localhost/sistema_encuestas
+    
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
     db.init_app(app)
@@ -27,5 +31,6 @@ def create_app():
     
     with app.app_context():
         db.create_all()
+        print("✅ Base de datos conectada correctamente")
     
     return app
