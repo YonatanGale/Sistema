@@ -207,6 +207,7 @@
         const previewContainer = document.getElementById('previewContainer');
         const mappingFields = document.getElementById('mappingFields');
         const previewTable = document.getElementById('previewTable');
+        const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
 
         // Eventos de arrastre y selección
         dropZone.addEventListener('click', () => fileInput.click());
@@ -252,9 +253,20 @@
 
             fetch('/encuesta/{{ encuesta.id }}/previsualizar', {
                 method: 'POST',
-                body: formData
+                body: formData,
+                headers: {
+                    'X-CSRFToken': csrfToken
+                }
             })
-            .then(response => response.json())
+            .then(async function(response) {
+                // Verificar si la respuesta es JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    throw new Error('El servidor devolvió HTML en lugar de JSON. Error: ' + response.status);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.error) {
                     alert('Error: ' + data.error);
@@ -303,7 +315,8 @@
                 btnSubir.disabled = false;
             })
             .catch(error => {
-                alert('Error al previsualizar el archivo: ' + error);
+                console.error('Error completo:', error);
+                alert('Error al previsualizar el archivo: ' + error.message + '\nRevisa la consola para más detalles.');
             });
         }
 
