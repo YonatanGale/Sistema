@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}Editar Opciones{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card card-custom fade-in">
+            <div class="card-header bg-warning text-dark">
+                <h4 class="mb-0">
+                    <i class="bi bi-list-ul"></i> Editar Opciones
+                </h4>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <strong>Pregunta:</strong> {{ pregunta.texto }}
+                    <br>
+                    <strong>Tipo:</strong> {{ pregunta.tipo|replace('_', ' ')|title }}
+                    <br>
+                    <a href="{{ url_for('encuestas.editar_pregunta', pregunta_id=pregunta.id) }}" 
+                       class="btn btn-sm btn-outline-secondary mt-2">
+                        <i class="bi bi-arrow-left"></i> Volver a editar pregunta
+                    </a>
+                </div>
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }} alert-dismissible fade show">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <form method="POST" id="editarOpcionesForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    {% if total_respuestas > 0 %}
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        <strong>¡Atención!</strong> Esta encuesta tiene <strong>{{ total_respuestas }}</strong> respuestas.
+                        <br>
+                        <small>Si editas las opciones, TODAS las respuestas de la encuesta se eliminarán permanentemente.</small>
+                    </div>
+                    
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="confirmar_eliminar" name="confirmar_eliminar">
+                        <label class="form-check-label fw-bold text-danger" for="confirmar_eliminar">
+                            <i class="bi bi-trash"></i> Confirmo que quiero eliminar las {{ total_respuestas }} respuestas existentes
+                        </label>
+                    </div>
+                    <hr>
+                    {% endif %}
+
+                    <div id="opcionesContainer">
+                        {% for opcion in opciones %}
+                        <div class="row g-2 mb-2 align-items-center">
+                            <input type="hidden" name="opcion_id" value="{{ opcion.id }}">
+                            <div class="col-7">
+                                <input type="text" class="form-control form-control-custom" 
+                                       name="opcion_texto" value="{{ opcion.texto }}" placeholder="Texto de la opción..." required>
+                            </div>
+                            <div class="col-3">
+                                <input type="text" class="form-control form-control-custom" 
+                                       name="opcion_valor" value="{{ opcion.valor or '' }}" placeholder="Valor (opcional)">
+                            </div>
+                            <div class="col-2">
+                                <div class="d-flex gap-1">
+                                    <input type="checkbox" class="form-check-input" name="opcion_eliminar" value="{{ opcion.id }}">
+                                    <label class="form-check-label text-danger">Eliminar</label>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="mb-3 mt-3">
+                        <button type="button" class="btn btn-outline-success" onclick="agregarOpcion()">
+                            <i class="bi bi-plus-circle"></i> Agregar otra opción
+                        </button>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('encuestas.editar_encuesta', encuesta_id=encuesta.id) }}" 
+                           class="btn btn-secondary">
+                            <i class="bi bi-arrow-left"></i> Volver a Encuesta
+                        </a>
+                        <button type="submit" class="btn btn-custom btn-custom-warning">
+                            <i class="bi bi-check-circle"></i> Guardar Cambios
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let contadorOpciones = {{ opciones|length }};
+
+    function agregarOpcion() {
+        const container = document.getElementById('opcionesContainer');
+        const nuevoRow = document.createElement('div');
+        nuevoRow.className = 'row g-2 mb-2 align-items-center';
+        nuevoRow.innerHTML = `
+            <input type="hidden" name="opcion_id" value="">
+            <div class="col-7">
+                <input type="text" class="form-control form-control-custom" 
+                       name="opcion_texto" placeholder="Texto de la opción..." required>
+            </div>
+            <div class="col-3">
+                <input type="text" class="form-control form-control-custom" 
+                       name="opcion_valor" placeholder="Valor (opcional)">
+            </div>
+            <div class="col-2">
+                <button type="button" class="btn btn-custom btn-custom-danger" onclick="eliminarOpcion(this)">
+                    <i class="bi bi-x-circle"></i>
+                </button>
+            </div>
+        `;
+        container.appendChild(nuevoRow);
+        contadorOpciones++;
+    }
+
+    function eliminarOpcion(btn) {
+        const row = btn.closest('.row');
+        if (document.querySelectorAll('#opcionesContainer .row').length > 1) {
+            row.remove();
+        } else {
+            alert('Debes tener al menos una opción');
+        }
+    }
+
+    document.getElementById('editarOpcionesForm').addEventListener('submit', function(e) {
+        {% if total_respuestas > 0 %}
+        const checkbox = document.getElementById('confirmar_eliminar');
+        if (!checkbox.checked) {
+            e.preventDefault();
+            alert('⚠️ Debes marcar la casilla para confirmar que quieres eliminar las {{ total_respuestas }} respuestas existentes.');
+            return false;
+        }
+        if (!confirm('⚠️ ¿Estás seguro? Se eliminarán permanentemente {{ total_respuestas }} respuestas. Esta acción no se puede deshacer.')) {
+            e.preventDefault();
+            return false;
+        }
+        {% endif %}
+        return true;
+    });
+</script>
+{% endblock %}

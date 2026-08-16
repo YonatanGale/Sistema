@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}Seleccionar Encuesta{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="card card-custom">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="bi bi-search"></i> Seleccionar Encuesta
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        <i class="bi bi-info-circle"></i>
+                        Selecciona la encuesta a la que deseas cargar respuestas
+                    </p>
+
+                    <!-- Buscador en tiempo real con sugerencias -->
+                    <div class="mb-4">
+                        <div class="input-group">
+                            <span class="input-group-text bg-light">
+                                <i class="bi bi-search"></i>
+                            </span>
+                            <input type="text" class="form-control form-control-custom" 
+                                   id="buscador" placeholder="Buscar encuesta por título..."
+                                   autofocus
+                                   autocomplete="off">
+                            <button class="btn btn-outline-secondary" type="button" onclick="limpiarBusqueda()">
+                                <i class="bi bi-x-circle"></i>
+                            </button>
+                        </div>
+                        <div class="d-flex justify-content-between mt-1">
+                            <small class="text-muted" id="contador-resultados"></small>
+                            <small class="text-muted" id="resultado-busqueda"></small>
+                        </div>
+                        <!-- Sugerencias -->
+                        <div id="sugerenciasContainer" class="mt-2" style="display: none;">
+                            <div class="card card-custom">
+                                <div class="card-body p-2" id="sugerenciasLista">
+                                    <!-- Se llena con JavaScript -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Lista de encuestas -->
+                    <div class="list-group" id="listaEncuestas">
+                        {% if encuestas %}
+                            {% for encuesta in encuestas %}
+                            <a href="{{ url_for('respuestas.cargar_respuestas', encuesta_id=encuesta.id) }}" 
+                               class="list-group-item list-group-item-action d-flex justify-content-between align-items-center encuesta-item"
+                               data-encuesta-id="{{ encuesta.id }}"
+                               data-titulo="{{ encuesta.titulo|lower }}">
+                                <div>
+                                    <h6 class="mb-0">
+                                        <i class="bi bi-file-earmark-text text-primary"></i>
+                                        {{ encuesta.titulo }}
+                                    </h6>
+                                    <small class="text-muted">
+                                        <i class="bi bi-question-circle"></i> {{ encuesta.preguntas|length }} preguntas |
+                                        <i class="bi bi-check-circle"></i> {{ encuesta.respuestas|length }} respuestas
+                                    </small>
+                                </div>
+                                <div>
+                                    <span class="badge bg-{{ 'success' if encuesta.estado == 'activa' else 'secondary' }} me-2">
+                                        {{ encuesta.estado|title }}
+                                    </span>
+                                    <i class="bi bi-chevron-right text-muted"></i>
+                                </div>
+                            </a>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-center py-5">
+                                <i class="bi bi-inbox" style="font-size: 3rem; color: #ccc;"></i>
+                                <p class="text-muted mt-3">No tienes encuestas creadas</p>
+                                <a href="{{ url_for('encuestas.crear_encuesta') }}" class="btn btn-custom btn-custom-primary">
+                                    <i class="bi bi-plus-circle"></i> Crear Encuesta
+                                </a>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Mensaje sin resultados -->
+                    <div id="sin-resultados" class="text-center py-4" style="display: none;">
+                        <i class="bi bi-search" style="font-size: 2rem; color: #ccc;"></i>
+                        <p class="text-muted mt-2">No se encontraron encuestas con ese título</p>
+                        <p class="text-muted small">Sugerencia: Intenta con otra palabra clave</p>
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <small class="text-muted">
+                        <i class="bi bi-arrow-left"></i> 
+                        <a href="{{ url_for('encuestas.mis_encuestas') }}" class="text-decoration-none">Volver a Mis Encuestas</a>
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const buscador = document.getElementById('buscador');
+    const items = document.querySelectorAll('.encuesta-item');
+    const contador = document.getElementById('contador-resultados');
+    const sinResultados = document.getElementById('sin-resultados');
+    const resultadoBusqueda = document.getElementById('resultado-busqueda');
+    const sugerenciasContainer = document.getElementById('sugerenciasContainer');
+    const sugerenciasLista = document.getElementById('sugerenciasLista');
+
+    if (!buscador) return;
+
+    let todasLasEncuestas = [];
+    let timeoutId = null;
+
+    // Capturar todas las encuestas
+    function capturarEncuestas() {
+        todasLasEncuestas = [];
+        items.forEach(item => {
+            todasLasEncuestas.push({
+                id: parseInt(item.getAttribute('data-encuesta-id')),
+                titulo: item.getAttribute('data-titulo'),
+                estado: item.querySelector('.badge')?.textContent?.trim() || 'activa',
+                preguntas: parseInt(item.querySelector('.encuesta-item small')?.textContent?.match(/\d+/)?.[0] || 0),
+                respuestas: parseInt(item.querySelector('.encuesta-item small')?.textContent?.match(/\d+(?=\s*respuestas)/)?.[0] || 0)
+            });
+        });
+    }
+
+    // Mostrar sugerencias
+    function mostrarSugerencias(termino) {
+        if (!termino || termino.length < 2) {
+            sugerenciasContainer.style.display = 'none';
+            return;
+        }
+
+        const coincidencias = todasLasEncuestas.filter(e => 
+            e.titulo && e.titulo.includes(termino.toLowerCase())
+        );
+
+        if (coincidencias.length === 0) {
+            sugerenciasContainer.style.display = 'none';
+            return;
+        }
+
+        let html = '';
+        coincidencias.slice(0, 5).forEach(encuesta => {
+            const titulo = encuesta.titulo;
+            const regex = new RegExp(`(${termino})`, 'gi');
+            const tituloResaltado = titulo.replace(regex, '<strong class="text-primary">$1</strong>');
+            
+            html += `
+                <a href="#" class="list-group-item list-group-item-action py-2 sugerencia-item"
+                   data-encuesta-id="${encuesta.id}"
+                   onclick="seleccionarSugerencia(${encuesta.id}, '${encuesta.titulo}')">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>${tituloResaltado}</span>
+                        <span class="badge bg-${encuesta.estado === 'activa' ? 'success' : 'secondary'} badge-sm">
+                            ${encuesta.estado}
+                        </span>
+                    </div>
+                    <small class="text-muted">
+                        <i class="bi bi-question-circle"></i> ${encuesta.preguntas} preguntas |
+                        <i class="bi bi-check-circle"></i> ${encuesta.respuestas} respuestas
+                    </small>
+                </a>
+            `;
+        });
+
+        sugerenciasLista.innerHTML = html;
+        sugerenciasContainer.style.display = 'block';
+    }
+
+    function filtrarEncuestas() {
+        const termino = buscador.value.toLowerCase().trim();
+        let visibles = 0;
+
+        if (!termino) {
+            sugerenciasContainer.style.display = 'none';
+        }
+
+        items.forEach(item => {
+            const titulo = item.getAttribute('data-titulo');
+            if (titulo && (titulo.includes(termino) || termino === '')) {
+                item.style.display = '';
+                visibles++;
+            } else {
+                item.style.display = 'none';
+            }
+        });
+
+        // Mostrar sugerencias
+        if (termino.length >= 1 && todasLasEncuestas.length > 0) {
+            mostrarSugerencias(termino);
+        }
+
+        if (sinResultados) {
+            if (visibles === 0 && items.length > 0 && termino !== '') {
+                sinResultados.style.display = 'block';
+            } else {
+                sinResultados.style.display = 'none';
+            }
+        }
+
+        if (contador) {
+            if (termino) {
+                contador.textContent = `🔍 ${visibles} encuesta${visibles !== 1 ? 's' : ''} encontrada${visibles !== 1 ? 's' : ''}`;
+            } else {
+                contador.textContent = `📌 ${visibles} encuesta${visibles !== 1 ? 's' : ''} disponibles`;
+            }
+        }
+
+        if (resultadoBusqueda) {
+            if (termino && visibles > 0) {
+                resultadoBusqueda.textContent = `⏱️ ${visibles} coincidencia${visibles !== 1 ? 's' : ''}`;
+            } else if (termino && visibles === 0) {
+                resultadoBusqueda.textContent = '❌ Sin coincidencias';
+            } else {
+                resultadoBusqueda.textContent = '';
+            }
+        }
+    }
+
+    buscador.addEventListener('input', function() {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(filtrarEncuestas, 100);
+    });
+
+    capturarEncuestas();
+    filtrarEncuestas();
+    buscador.focus();
+
+    window.limpiarBusqueda = function() {
+        buscador.value = '';
+        sugerenciasContainer.style.display = 'none';
+        buscador.dispatchEvent(new Event('input'));
+        buscador.focus();
+    };
+
+    window.seleccionarSugerencia = function(encuestaId, titulo) {
+        buscador.value = titulo;
+        sugerenciasContainer.style.display = 'none';
+        buscador.dispatchEvent(new Event('input'));
+        // Redirigir a la encuesta
+        const link = document.querySelector(`.encuesta-item[data-encuesta-id="${encuestaId}"]`);
+        if (link) {
+            window.location.href = link.href;
+        }
+    };
+
+    // Cerrar sugerencias al hacer clic fuera
+    document.addEventListener('click', function(e) {
+        if (!sugerenciasContainer.contains(e.target) && e.target !== buscador) {
+            sugerenciasContainer.style.display = 'none';
+        }
+    });
+});
+</script>
+{% endblock %}

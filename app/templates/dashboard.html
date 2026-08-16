@@ -1,81 +1,84 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - Sistema de Encuestas</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
-            <a class="navbar-brand" href="#">
-                <i class="bi bi-clipboard-data"></i> Sistema de Encuestas
-            </a>
-            <div class="navbar-nav ms-auto">
-                <span class="navbar-text me-3">Bienvenido, {{ current_user.username }}</span>
-                <a href="{{ url_for('encuestas.crear_encuesta') }}" class="btn btn-success me-2">
-                    <i class="bi bi-plus-circle"></i> Nueva Encuesta
-                </a>
-                <a href="{{ url_for('encuestas.mis_encuestas') }}" class="btn btn-outline-light me-2">
-                    <i class="bi bi-list-ul"></i> Mis Encuestas
-                </a>
-                <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-light">
-                    <i class="bi bi-box-arrow-right"></i> Cerrar Sesión
-                </a>
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="row">
+        <div class="col text-center mb-5">
+            <h1 class="display-4 fw-bold">
+                <i class="bi bi-speedometer2 text-primary"></i> Dashboard
+            </h1>
+            <p class="lead text-muted">
+                Bienvenido al Sistema de Análisis de Encuestas
+            </p>
+            <hr class="w-50 mx-auto">
+        </div>
+    </div>
+
+    <div class="row g-4 justify-content-center">
+        <!-- Crear Encuesta -->
+        <div class="col-md-4">
+            <div class="card card-custom text-center h-100 shadow-hover">
+                <div class="card-body py-5">
+                    <div class="display-1 text-primary mb-4">
+                        <i class="bi bi-file-earmark-plus"></i>
+                    </div>
+                    <h5 class="card-title fw-bold">Crear Encuesta</h5>
+                    <p class="card-text text-muted">Diseña tu encuesta desde cero con preguntas y opciones</p>
+                    <a href="{{ url_for('encuestas.crear_encuesta') }}" class="btn btn-custom btn-custom-primary mt-3">
+                        <i class="bi bi-plus-circle"></i> Crear
+                    </a>
+                </div>
             </div>
         </div>
-    </nav>
-    
-    <div class="container mt-4">
-        <div class="row">
-            <div class="col">
-                <h1>Dashboard</h1>
-                <p class="lead">Bienvenido al Sistema de Análisis de Encuestas</p>
-                
-                <div class="row mt-4">
-                    <div class="col-md-4">
-                        <div class="card shadow text-center">
-                            <div class="card-body">
-                                <i class="bi bi-file-earmark-plus" style="font-size: 3rem; color: #0d6efd;"></i>
-                                <h5 class="mt-2">Crear Encuesta</h5>
-                                <p class="text-muted">Diseña tu encuesta desde cero</p>
-                                <a href="{{ url_for('encuestas.crear_encuesta') }}" class="btn btn-primary">
-                                    <i class="bi bi-plus-circle"></i> Crear
-                                </a>
-                            </div>
-                        </div>
+
+        <!-- Mis Encuestas -->
+        <div class="col-md-4">
+            <div class="card card-custom text-center h-100 shadow-hover">
+                <div class="card-body py-5">
+                    <div class="display-1 text-success mb-4">
+                        <i class="bi bi-list-ul"></i>
                     </div>
-                    <div class="col-md-4">
-                        <div class="card shadow text-center">
-                            <div class="card-body">
-                                <i class="bi bi-list-ul" style="font-size: 3rem; color: #198754;"></i>
-                                <h5 class="mt-2">Mis Encuestas</h5>
-                                <p class="text-muted">Gestiona tus encuestas creadas</p>
-                                <a href="{{ url_for('encuestas.mis_encuestas') }}" class="btn btn-success">
-                                    <i class="bi bi-eye"></i> Ver
-                                </a>
-                            </div>
-                        </div>
+                    <h5 class="card-title fw-bold">Mis Encuestas</h5>
+                    <p class="card-text text-muted">Gestiona, edita y visualiza tus encuestas creadas</p>
+                    <a href="{{ url_for('encuestas.mis_encuestas') }}" class="btn btn-custom btn-custom-success mt-3">
+                        <i class="bi bi-eye"></i> Ver
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cargar Respuestas - ABRE MODAL -->
+        <div class="col-md-4">
+            <div class="card card-custom text-center h-100 shadow-hover">
+                <div class="card-body py-5">
+                    <div class="display-1 text-warning mb-4">
+                        <i class="bi bi-upload"></i>
                     </div>
-                    <div class="col-md-4">
-                        <div class="card shadow text-center">
-                            <div class="card-body">
-                                <i class="bi bi-upload" style="font-size: 3rem; color: #ffc107;"></i>
-                                <h5 class="mt-2">Cargar Respuestas</h5>
-                                <p class="text-muted">Importa respuestas desde Excel o CSV</p>
-                                <a href="#" class="btn btn-warning">
-                                    <i class="bi bi-upload"></i> Cargar
-                                </a>
-                            </div>
-                        </div>
-                    </div>
+                    <h5 class="card-title fw-bold">Cargar Respuestas</h5>
+                    <p class="card-text text-muted">Importa respuestas desde archivos Excel o CSV</p>
+                    <button class="btn btn-custom btn-custom-warning mt-3" 
+                            data-bs-toggle="modal" 
+                            data-bs-target="#modalSeleccionarEncuesta">
+                        <i class="bi bi-upload"></i> Seleccionar
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+    <div class="row mt-5">
+        <div class="col-12">
+            <div class="card card-custom bg-light">
+                <div class="card-body text-center">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle"></i>
+                        Desde aquí puedes acceder a todas las funcionalidades del sistema.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

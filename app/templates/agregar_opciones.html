@@ -1,126 +1,108 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Agregar Opciones - {{ encuesta.titulo }}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-</head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
-            <a class="navbar-brand" href="#">
-                <i class="bi bi-clipboard-data"></i> Sistema de Encuestas
-            </a>
-            <div class="navbar-nav ms-auto">
-                <span class="navbar-text me-3">Agregar Opciones</span>
-                <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-light">
-                    <i class="bi bi-box-arrow-right"></i> Cerrar Sesión
-                </a>
+{% extends "base.html" %}
+
+{% block title %}Agregar Opciones{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card card-custom fade-in">
+            <div class="card-header bg-success text-white">
+                <h4 class="mb-0">
+                    <i class="bi bi-list-ul"></i> Agregar Opciones
+                </h4>
             </div>
-        </div>
-    </nav>
-
-    <div class="container mt-4">
-        <div class="row">
-            <div class="col-md-8 mx-auto">
-                <div class="card shadow">
-                    <div class="card-header bg-success text-white">
-                        <h4 class="mb-0">
-                            <i class="bi bi-list-ul"></i> Agregar Opciones
-                        </h4>
-                    </div>
-                    <div class="card-body">
-                        <div class="alert alert-info">
-                            <strong>Pregunta:</strong> {{ pregunta.texto }}
-                            <br>
-                            <strong>Tipo:</strong> {{ pregunta.tipo|replace('_', ' ')|title }}
-                        </div>
-
-                        {% with messages = get_flashed_messages(with_categories=true) %}
-                            {% if messages %}
-                                {% for category, message in messages %}
-                                    <div class="alert alert-{{ category }}">{{ message }}</div>
-                                {% endfor %}
-                            {% endif %}
-                        {% endwith %}
-
-                        <form method="POST" id="opcionesForm">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <div id="opcionesContainer">
-                                <div class="row g-2 mb-2">
-                                    <div class="col-8">
-                                        <input type="text" class="form-control" name="opcion_texto" 
-                                               placeholder="Escribe una opción..." required>
-                                    </div>
-                                    <div class="col-3">
-                                        <input type="text" class="form-control" name="opcion_valor" 
-                                               placeholder="Valor (opcional)">
-                                    </div>
-                                    <div class="col-1">
-                                        <button type="button" class="btn btn-danger" onclick="eliminarOpcion(this)">
-                                            <i class="bi bi-x-circle"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="mb-3">
-                                <button type="button" class="btn btn-outline-success" onclick="agregarOpcion()">
-                                    <i class="bi bi-plus-circle"></i> Agregar otra opción
-                                </button>
-                            </div>
-
-                            <div class="d-flex justify-content-between">
-                                <a href="{{ url_for('encuestas.agregar_pregunta', encuesta_id=encuesta.id) }}" 
-                                   class="btn btn-secondary">
-                                    <i class="bi bi-arrow-left"></i> Volver
-                                </a>
-                                <button type="submit" class="btn btn-success">
-                                    <i class="bi bi-check-circle"></i> Guardar Opciones
-                                </button>
-                            </div>
-                        </form>
-                    </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <strong>Pregunta:</strong> {{ pregunta.texto }}
+                    <br>
+                    <strong>Tipo:</strong> {{ pregunta.tipo|replace('_', ' ')|title }}
                 </div>
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }} alert-dismissible fade show">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <form method="POST" id="opcionesForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    
+                    <div id="opcionesContainer">
+                        <div class="row g-2 mb-2">
+                            <div class="col-8">
+                                <input type="text" class="form-control form-control-custom" 
+                                       name="opcion_texto" placeholder="Escribe una opción..." required>
+                            </div>
+                            <div class="col-3">
+                                <input type="text" class="form-control form-control-custom" 
+                                       name="opcion_valor" placeholder="Valor (opcional)">
+                            </div>
+                            <div class="col-1">
+                                <button type="button" class="btn btn-custom btn-custom-danger" 
+                                        onclick="eliminarOpcion(this)">
+                                    <i class="bi bi-x-circle"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <button type="button" class="btn btn-outline-success" onclick="agregarOpcion()">
+                            <i class="bi bi-plus-circle"></i> Agregar otra opción
+                        </button>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('encuestas.agregar_pregunta', encuesta_id=encuesta.id) }}" 
+                           class="btn btn-secondary">
+                            <i class="bi bi-arrow-left"></i> Volver
+                        </a>
+                        <button type="submit" class="btn btn-custom btn-custom-success">
+                            <i class="bi bi-check-circle"></i> Guardar Opciones
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
+</div>
 
-    <script>
-        function agregarOpcion() {
-            const container = document.getElementById('opcionesContainer');
-            const nuevoRow = document.createElement('div');
-            nuevoRow.className = 'row g-2 mb-2';
-            nuevoRow.innerHTML = `
-                <div class="col-8">
-                    <input type="text" class="form-control" name="opcion_texto" 
-                           placeholder="Escribe una opción..." required>
-                </div>
-                <div class="col-3">
-                    <input type="text" class="form-control" name="opcion_valor" 
-                           placeholder="Valor (opcional)">
-                </div>
-                <div class="col-1">
-                    <button type="button" class="btn btn-danger" onclick="eliminarOpcion(this)">
-                        <i class="bi bi-x-circle"></i>
-                    </button>
-                </div>
-            `;
-            container.appendChild(nuevoRow);
+<script>
+    function agregarOpcion() {
+        const container = document.getElementById('opcionesContainer');
+        const nuevoRow = document.createElement('div');
+        nuevoRow.className = 'row g-2 mb-2';
+        nuevoRow.innerHTML = `
+            <div class="col-8">
+                <input type="text" class="form-control form-control-custom" 
+                       name="opcion_texto" placeholder="Escribe una opción..." required>
+            </div>
+            <div class="col-3">
+                <input type="text" class="form-control form-control-custom" 
+                       name="opcion_valor" placeholder="Valor (opcional)">
+            </div>
+            <div class="col-1">
+                <button type="button" class="btn btn-custom btn-custom-danger" 
+                        onclick="eliminarOpcion(this)">
+                    <i class="bi bi-x-circle"></i>
+                </button>
+            </div>
+        `;
+        container.appendChild(nuevoRow);
+    }
+
+    function eliminarOpcion(btn) {
+        const row = btn.closest('.row');
+        if (document.querySelectorAll('#opcionesContainer .row').length > 1) {
+            row.remove();
+        } else {
+            alert('Debes tener al menos una opción');
         }
-
-        function eliminarOpcion(btn) {
-            const row = btn.closest('.row');
-            if (document.querySelectorAll('#opcionesContainer .row').length > 1) {
-                row.remove();
-            } else {
-                alert('Debes tener al menos una opción');
-            }
-        }
-    </script>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+    }
+</script>
+{% endblock %}

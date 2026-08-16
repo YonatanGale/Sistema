@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}Editar Encuesta{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="card card-custom">
+                <div class="card-header bg-warning text-dark">
+                    <h4 class="mb-0">
+                        <i class="bi bi-pencil-square"></i> Editar Encuesta
+                    </h4>
+                </div>
+                <div class="card-body">
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }} alert-dismissible fade show">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <form method="POST" id="editarEncuestaForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        {% if total_respuestas > 0 %}
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                            <strong>¡Atención!</strong> Esta encuesta tiene <strong>{{ total_respuestas }}</strong> respuestas.
+                            <br>
+                            <small>Si editas las preguntas u opciones, TODAS las respuestas se eliminarán permanentemente.</small>
+                        </div>
+                        
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="confirmar_eliminar" name="confirmar_eliminar">
+                            <label class="form-check-label fw-bold text-danger" for="confirmar_eliminar">
+                                <i class="bi bi-trash"></i> Confirmo que quiero eliminar las {{ total_respuestas }} respuestas existentes
+                            </label>
+                        </div>
+                        <hr>
+                        {% endif %}
+
+                        <div class="mb-3">
+                            <label for="titulo" class="form-label form-label-custom">
+                                <i class="bi bi-pencil-square"></i> Título de la Encuesta
+                            </label>
+                            <input type="text" class="form-control form-control-custom form-control-lg" 
+                                   id="titulo" name="titulo" value="{{ encuesta.titulo }}" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="descripcion" class="form-label form-label-custom">
+                                <i class="bi bi-card-text"></i> Descripción
+                            </label>
+                            <textarea class="form-control form-control-custom" id="descripcion" 
+                                      name="descripcion" rows="3">{{ encuesta.descripcion or '' }}</textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="estado" class="form-label form-label-custom">
+                                <i class="bi bi-toggle-on"></i> Estado
+                            </label>
+                            <select class="form-select form-control-custom" id="estado" name="estado">
+                                <option value="activa" {% if encuesta.estado == 'activa' %}selected{% endif %}>Activa</option>
+                                <option value="cerrada" {% if encuesta.estado == 'cerrada' %}selected{% endif %}>Cerrada</option>
+                                <option value="archivada" {% if encuesta.estado == 'archivada' %}selected{% endif %}>Archivada</option>
+                            </select>
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('encuestas.mis_encuestas') }}" class="btn btn-secondary">
+                                <i class="bi bi-arrow-left"></i> Volver
+                            </a>
+                            <button type="submit" class="btn btn-custom btn-custom-warning">
+                                <i class="bi bi-check-circle"></i> Guardar Cambios
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- LISTA DE PREGUNTAS -->
+            <div class="card card-custom mt-4">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-list-check"></i> Preguntas de la Encuesta</h5>
+                    <a href="{{ url_for('encuestas.agregar_pregunta', encuesta_id=encuesta.id) }}" 
+                       class="btn btn-sm btn-light">
+                        <i class="bi bi-plus-circle"></i> Agregar Pregunta
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if preguntas %}
+                        <div class="list-group list-group-flush">
+                            {% for pregunta in preguntas|sort(attribute='orden') %}
+                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <span class="badge bg-secondary me-2">{{ loop.index }}</span>
+                                    <span class="fw-bold">{{ pregunta.texto }}</span>
+                                    <br>
+                                    <small class="text-muted">
+                                        <i class="bi bi-tag"></i> {{ pregunta.tipo|replace('_', ' ')|title }}
+                                        {% if pregunta.requerida %}
+                                            <span class="badge bg-danger">Requerida</span>
+                                        {% endif %}
+                                        {% if pregunta.opciones %}
+                                            <span class="badge bg-info">{{ pregunta.opciones|length }} opciones</span>
+                                        {% endif %}
+                                    </small>
+                                </div>
+                                <div class="d-flex gap-1">
+                                    <a href="{{ url_for('encuestas.editar_pregunta', pregunta_id=pregunta.id) }}" 
+                                       class="btn btn-sm btn-outline-warning" title="Editar pregunta">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" 
+                                            onclick="eliminarPregunta({{ pregunta.id }})" title="Eliminar pregunta">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="bi bi-question-circle" style="font-size: 2rem; color: #ccc;"></i>
+                            <p class="text-muted mt-2">No hay preguntas en esta encuesta</p>
+                            <a href="{{ url_for('encuestas.agregar_pregunta', encuesta_id=encuesta.id) }}" 
+                               class="btn btn-primary btn-sm">
+                                <i class="bi bi-plus-circle"></i> Agregar primera pregunta
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="card-footer bg-light">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle"></i> 
+                        Haz clic en el lápiz ✏️ para editar una pregunta o sus opciones
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('editarEncuestaForm').addEventListener('submit', function(e) {
+    {% if total_respuestas > 0 %}
+    const checkbox = document.getElementById('confirmar_eliminar');
+    if (!checkbox.checked) {
+        e.preventDefault();
+        alert('⚠️ Debes marcar la casilla para confirmar que quieres eliminar las {{ total_respuestas }} respuestas existentes.');
+        return false;
+    }
+    if (!confirm('⚠️ ¿Estás seguro? Se eliminarán permanentemente {{ total_respuestas }} respuestas. Esta acción no se puede deshacer.')) {
+        e.preventDefault();
+        return false;
+    }
+    {% endif %}
+    return true;
+});
+
+function eliminarPregunta(preguntaId) {
+    if (confirm('¿Estás seguro de eliminar esta pregunta?')) {
+        fetch('/pregunta/' + preguntaId + '/eliminar', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        }).then(response => {
+            if (response.ok) {
+                location.reload();
+            } else {
+                alert('Error al eliminar la pregunta');
+            }
+        });
+    }
+}
+</script>
+{% endblock %}

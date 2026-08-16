@@ -1,0 +1,240 @@
+<!-- ============================================
+     MODAL: SELECCIONAR ENCUESTA (BÚSQUEDA EN SERVIDOR)
+     ============================================ -->
+<div class="modal fade" id="modalSeleccionarEncuesta" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-search"></i> Seleccionar Encuesta
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">
+                    <i class="bi bi-info-circle"></i>
+                    Selecciona la encuesta a la que deseas cargar respuestas
+                </p>
+
+                <!-- Buscador con búsqueda en servidor -->
+                <div class="mb-3">
+                    <div class="input-group">
+                        <span class="input-group-text bg-light">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input type="text" class="form-control form-control-custom" 
+                               id="buscadorModal" 
+                               placeholder="Buscar encuesta por título..."
+                               autofocus
+                               autocomplete="off">
+                        <button class="btn btn-outline-secondary" type="button" onclick="limpiarBuscadorModal()">
+                            <i class="bi bi-x-circle"></i>
+                        </button>
+                    </div>
+                    <div class="d-flex justify-content-between mt-1">
+                        <small class="text-muted" id="contadorModal">📌 Escribe para buscar...</small>
+                        <small class="text-muted" id="resultadoModal"></small>
+                    </div>
+                </div>
+
+                <!-- Lista de encuestas (se llena con AJAX) -->
+                <div class="list-group" id="listaEncuestasModal" style="max-height: 400px; overflow-y: auto;">
+                    <div class="text-center py-4">
+                        <i class="bi bi-search" style="font-size: 2rem; color: #ccc;"></i>
+                        <p class="text-muted mt-2">Escribe al menos 2 caracteres para buscar</p>
+                    </div>
+                </div>
+
+                <!-- Cargando -->
+                <div id="loadingModal" class="text-center py-4" style="display: none;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Buscando...</span>
+                    </div>
+                    <p class="text-muted mt-2">Buscando encuestas...</p>
+                </div>
+
+                <!-- Mensaje sin resultados -->
+                <div id="sinResultadosModal" class="text-center py-4" style="display: none;">
+                    <i class="bi bi-search" style="font-size: 2rem; color: #ccc;"></i>
+                    <p class="text-muted mt-2">No se encontraron encuestas con ese título</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================
+     MODAL: CARGAR RESPUESTAS
+     ============================================ -->
+<div class="modal fade" id="modalCargarRespuestas" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-upload"></i> Cargar Respuestas
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="contenidoCargaRespuestas">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                    <p class="text-muted mt-2">Cargando formulario...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * Buscador en tiempo real con búsqueda en servidor (AJAX)
+ */
+document.addEventListener('DOMContentLoaded', function() {
+    const buscador = document.getElementById('buscadorModal');
+    const listaContainer = document.getElementById('listaEncuestasModal');
+    const contador = document.getElementById('contadorModal');
+    const resultado = document.getElementById('resultadoModal');
+    const sinResultados = document.getElementById('sinResultadosModal');
+    const loadingModal = document.getElementById('loadingModal');
+    
+    if (!buscador) return;
+
+    let timeoutId = null;
+
+    function buscarEncuestas(termino) {
+        // Si el término tiene menos de 2 caracteres, mostrar mensaje inicial
+        if (!termino || termino.length < 2) {
+            loadingModal.style.display = 'none';
+            sinResultados.style.display = 'none';
+            listaContainer.style.display = '';
+            listaContainer.innerHTML = `
+                <div class="text-center py-4">
+                    <i class="bi bi-search" style="font-size: 2rem; color: #ccc;"></i>
+                    <p class="text-muted mt-2">Escribe al menos 2 caracteres para buscar</p>
+                </div>
+            `;
+            if (contador) contador.textContent = '📌 Escribe para buscar...';
+            if (resultado) resultado.textContent = '';
+            return;
+        }
+
+        // Mostrar loading
+        loadingModal.style.display = 'block';
+        listaContainer.style.display = 'none';
+        sinResultados.style.display = 'none';
+        if (contador) contador.textContent = '🔍 Buscando...';
+        if (resultado) resultado.textContent = '';
+
+        // Realizar búsqueda en el servidor
+        fetch('/buscar-encuestas?q=' + encodeURIComponent(termino) + '&limite=20')
+            .then(response => response.json())
+            .then(data => {
+                loadingModal.style.display = 'none';
+
+                if (data.resultados && data.resultados.length > 0) {
+                    // Mostrar resultados
+                    let html = '';
+                    data.resultados.forEach(encuesta => {
+                        // Resaltar coincidencia
+                        const titulo = encuesta.titulo;
+                        const regex = new RegExp(`(${termino})`, 'gi');
+                        const tituloResaltado = titulo.replace(regex, '<strong class="text-primary">$1</strong>');
+                        
+                        html += `
+                            <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center encuesta-item-modal"
+                               data-encuesta-id="${encuesta.id}"
+                               onclick="seleccionarEncuestaModal(${encuesta.id})">
+                                <div>
+                                    <h6 class="mb-0">
+                                        <i class="bi bi-file-earmark-text text-primary"></i>
+                                        ${tituloResaltado}
+                                    </h6>
+                                    <small class="text-muted">
+                                        <i class="bi bi-question-circle"></i> ${encuesta.preguntas} preguntas |
+                                        <i class="bi bi-check-circle"></i> ${encuesta.respuestas} respuestas
+                                    </small>
+                                </div>
+                                <div>
+                                    <span class="badge bg-${encuesta.estado === 'activa' ? 'success' : 'secondary'} me-2">
+                                        ${encuesta.estado}
+                                    </span>
+                                    <i class="bi bi-chevron-right text-muted"></i>
+                                </div>
+                            </a>
+                        `;
+                    });
+                    listaContainer.innerHTML = html;
+                    listaContainer.style.display = '';
+                    sinResultados.style.display = 'none';
+
+                    if (contador) {
+                        contador.textContent = `🔍 ${data.total} encuesta${data.total !== 1 ? 's' : ''} encontrada${data.total !== 1 ? 's' : ''}`;
+                    }
+                    if (resultado) {
+                        resultado.textContent = `⏱️ ${data.total} coincidencia${data.total !== 1 ? 's' : ''}`;
+                    }
+
+                } else {
+                    // Sin resultados
+                    listaContainer.style.display = 'none';
+                    sinResultados.style.display = 'block';
+                    if (contador) contador.textContent = '🔍 0 resultados';
+                    if (resultado) resultado.textContent = '❌ Sin coincidencias';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                loadingModal.style.display = 'none';
+                listaContainer.style.display = '';
+                listaContainer.innerHTML = `
+                    <div class="text-center py-4 text-danger">
+                        <i class="bi bi-exclamation-triangle" style="font-size: 2rem;"></i>
+                        <p class="mt-2">Error al buscar encuestas</p>
+                    </div>
+                `;
+            });
+    }
+
+    // Evento de búsqueda con delay (300ms para evitar muchas peticiones)
+    buscador.addEventListener('input', function() {
+        clearTimeout(timeoutId);
+        const termino = buscador.value.trim();
+        timeoutId = setTimeout(() => buscarEncuestas(termino), 300);
+    });
+
+    // Función global para limpiar
+    window.limpiarBuscadorModal = function() {
+        buscador.value = '';
+        buscarEncuestas('');
+        buscador.focus();
+    };
+
+    // Función global para seleccionar encuesta
+    window.seleccionarEncuestaModal = function(encuestaId) {
+        const modalSelect = document.getElementById('modalSeleccionarEncuesta');
+        if (modalSelect) {
+            const bsModal = bootstrap.Modal.getInstance(modalSelect);
+            if (bsModal) bsModal.hide();
+        }
+        // Cargar formulario de carga
+        if (typeof EncuestasApp !== 'undefined' && EncuestasApp.cargarFormularioCarga) {
+            EncuestasApp.cargarFormularioCarga(encuestaId);
+        } else {
+            window.location.href = '/encuesta/' + encuestaId + '/cargar-respuestas';
+        }
+    };
+
+    // Enfocar el buscador cuando se abre el modal
+    const modalSelect = document.getElementById('modalSeleccionarEncuesta');
+    if (modalSelect) {
+        modalSelect.addEventListener('shown.bs.modal', function() {
+            setTimeout(() => buscador.focus(), 300);
+        });
+    }
+});
+</script>

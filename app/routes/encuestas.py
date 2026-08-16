@@ -1,10 +1,15 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from app import db
-from app.models import Encuesta, Pregunta, Opcion
+from app.models import Encuesta, Pregunta, Opcion, Respuesta
 from datetime import datetime
 
 encuestas_bp = Blueprint('encuestas', __name__)
+
+
+# ============================================
+# RUTAS PRINCIPALES
+# ============================================
 
 @encuestas_bp.route('/crear-encuesta', methods=['GET', 'POST'])
 @login_required
@@ -148,3 +153,658 @@ def eliminar_pregunta(pregunta_id):
     db.session.commit()
     flash('Pregunta eliminada exitosamente', 'success')
     return redirect(url_for('encuestas.agregar_pregunta', encuesta_id=encuesta.id))
+
+
+@encuestas_bp.route('/encuesta/<int:encuesta_id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_encuesta(encuesta_id):
+    encuesta = Encuesta.query.get_or_404(encuesta_id)
+    
+    if encuesta.usuario_id != current_user.id:
+        flash('No tienes permiso para editar esta encuesta', 'danger')
+        return redirect(url_for('encuestas.mis_encuestas'))
+    
+    total_respuestas = Respuesta.query.filter_by(encuesta_id=encuesta_id).count()
+    preguntas = Pregunta.query.filter_by(encuesta_id=encuesta_id).order_by(Pregunta.orden).all()
+    
+    if request.method == 'POST':
+        titulo = request.form.get('titulo')
+        descripcion = request.form.get('descripcion')
+        estado = request.form.get('estado', 'activa')
+        confirmar_eliminar = request.form.get('confirmar_eliminar') == 'on'
+        
+        if not titulo:
+            flash('El título de la encuesta es obligatorio', 'danger')
+            return redirect(request.url)
+        
+        if total_respuestas > 0:
+            if not confirmar_eliminar:
+                flash('⚠️ Debes confirmar que quieres eliminar las respuestas existentes para editar las preguntas', 'danger')
+                return redirect(request.url)
+            
+            Respuesta.query.filter_by(encuesta_id=encuesta_id).delete()
+            db.session.commit()
+            flash(f'🗑️ Se eliminaron {total_respuestas} respuestas para poder editar la encuesta', 'warning')
+        
+        encuesta.titulo = titulo
+        encuesta.descripcion = descripcion
+        encuesta.estado = estado
+        encuesta.fecha_actualizacion = datetime.utcnow()
+        
+        db.session.commit()
+        flash('✅ Encuesta actualizada exitosamente', 'success')
+        return redirect(url_for('encuestas.mis_encuestas'))
+    
+    return render_template('editar_encuesta.html', 
+                         encuesta=encuesta, 
+                         preguntas=preguntas,
+                         total_respuestas=total_respuestas)
+
+
+@encuestas_bp.route('/pregunta/<int:pregunta_id>/editar', methods=['GET', 'POST'])
+@login_required
+def editar_pregunta(pregunta_id):
+    pregunta = Pregunta.query.get_or_404(pregunta_id)
+    encuesta = pregunta.encuesta
+    
+    if encuesta.usuario_id != current_user.id:
+        flash('No tienes permiso para editar esta pregunta', 'danger')
+        return redirect(url_for('encuestas.mis_encuestas'))
+    
+    total_respuestas = Respuesta.query.filter_by(encuesta_id=encuesta.id).count()
+    
+    if request.method == 'POST':
+        texto = request.form.get('texto')
+        tipo = request.form.get('tipo')
+        requerida = request.form.get('requerida') == 'on'
+        ayudante = request.form.get('ayudante')
+        confirmar_eliminar = request.form.get('confirmar_eliminar') == 'on'
+        
+        if not texto or not tipo:
+            flash('El texto y tipo de pregunta son obligatorios', 'danger')
+            return redirect(request.url)
+        
+        if total_respuestas > 0:
+            if not confirmar_eliminar:
+                flash('⚠️ Debes confirmar que quieres eliminar las respuestas existentes', 'danger')
+                return redirect(request.url)
+            
+            Respuesta.query.filter_by(encuesta_id=encuesta.id).delete()
+            db.session.commit()
+            flash(f'🗑️ Se eliminaron {total_respuestas} respuestas para poder editar la pregunta', 'warning')
+        
+        pregunta.texto = texto
+        pregunta.tipo = tipo
+        pregunta.requerida = requerida
+        pregunta.ayudante = ayudante
+        
+        db.session.commit()
+        flash('✅ Pregunta actualizada exitosamente', 'success')
+        
+        if pregunta.tiene_opciones():
+            return redirect(url_for('encuestas.editar_opciones', pregunta_id=pregunta.id))
+        
+        return redirect(url_for('encuestas.agregar_pregunta', encuesta_id=encuesta.id))
+    
+    return render_template('editar_pregunta.html', 
+                         pregunta=pregunta, 
+                         encuesta=encuesta,
+                         total_respuestas=total_respuestas)
+
+
+@encuestas_bp.route('/pregunta/<int:pregunta_id>/opciones/editar', methods=['GET', 'POST'])
+@login_required
+def editar_opciones(pregunta_id):
+    pregunta = Pregunta.query.get_or_404(pregunta_id)
+    encuesta = pregunta.encuesta
+    
+    if encuesta.usuario_id != current_user.id:
+        flash('No tienes permiso para editar estas opciones', 'danger')
+        return redirect(url_for('encuestas.mis_encuestas'))
+    
+    total_respuestas = Respuesta.query.filter_by(encuesta_id=encuesta.id).count()
+    opciones = Opcion.query.filter_by(pregunta_id=pregunta_id).order_by(Opcion.orden).all()
+    
+    if request.method == 'POST':
+        confirmar_eliminar = request.form.get('confirmar_eliminar') == 'on'
+        
+        if total_respuestas > 0:
+            if not confirmar_eliminar:
+                flash('⚠️ Debes confirmar que quieres eliminar las respuestas existentes', 'danger')
+                return redirect(request.url)
+            
+            Respuesta.query.filter_by(encuesta_id=encuesta.id).delete()
+            db.session.commit()
+            flash(f'🗑️ Se eliminaron {total_respuestas} respuestas para poder editar las opciones', 'warning')
+        
+        opciones_ids = request.form.getlist('opcion_id')
+        opciones_texto = request.form.getlist('opcion_texto')
+        opciones_valor = request.form.getlist('opcion_valor')
+        opciones_eliminar = request.form.getlist('opcion_eliminar')
+        
+        for opcion_id in opciones_eliminar:
+            opcion = Opcion.query.get(int(opcion_id))
+            if opcion:
+                db.session.delete(opcion)
+        
+        for i in range(len(opciones_texto)):
+            if opciones_texto[i].strip():
+                if i < len(opciones_ids) and opciones_ids[i]:
+                    opcion = Opcion.query.get(int(opciones_ids[i]))
+                    if opcion:
+                        opcion.texto = opciones_texto[i].strip()
+                        opcion.valor = opciones_valor[i].strip() if i < len(opciones_valor) and opciones_valor[i] else None
+                        opcion.orden = i + 1
+                else:
+                    nueva_opcion = Opcion(
+                        pregunta_id=pregunta_id,
+                        texto=opciones_texto[i].strip(),
+                        valor=opciones_valor[i].strip() if i < len(opciones_valor) and opciones_valor[i] else None,
+                        orden=i + 1
+                    )
+                    db.session.add(nueva_opcion)
+        
+        db.session.commit()
+        flash('✅ Opciones actualizadas exitosamente', 'success')
+        return redirect(url_for('encuestas.agregar_pregunta', encuesta_id=encuesta.id))
+    
+    return render_template('editar_opciones.html', 
+                         pregunta=pregunta, 
+                         encuesta=encuesta, 
+                         opciones=opciones,
+                         total_respuestas=total_respuestas)
+
+
+@encuestas_bp.route('/encuesta/<int:encuesta_id>/tiene-respuestas')
+@login_required
+def tiene_respuestas(encuesta_id):
+    encuesta = Encuesta.query.get_or_404(encuesta_id)
+    
+    if encuesta.usuario_id != current_user.id:
+        return jsonify({'error': 'No tienes permiso'}), 403
+    
+    tiene = Respuesta.query.filter_by(encuesta_id=encuesta_id).first() is not None
+    
+    return jsonify({'tiene_respuestas': tiene})
+
+
+# ============================================
+# RUTAS AJAX - BÚSQUEDA EN SERVIDOR
+# ============================================
+
+@encuestas_bp.route('/buscar-encuestas')
+@login_required
+def buscar_encuestas():
+    """Busca encuestas por título (para autocompletado y filtrado)"""
+    termino = request.args.get('q', '').strip()
+    limite = request.args.get('limite', 20, type=int)
+    pagina = request.args.get('pagina', 1, type=int)
+    
+    query = Encuesta.query.filter_by(usuario_id=current_user.id)
+    
+    if termino:
+        # Búsqueda con LIKE (insensible a mayúsculas)
+        query = query.filter(Encuesta.titulo.ilike(f'%{termino}%'))
+    
+    # Paginación
+    paginacion = query.order_by(Encuesta.fecha_creacion.desc()).paginate(
+        page=pagina, per_page=limite, error_out=False
+    )
+    
+    resultados = []
+    for e in paginacion.items:
+        resultados.append({
+            'id': e.id,
+            'titulo': e.titulo,
+            'descripcion': e.descripcion,
+            'estado': e.estado,
+            'preguntas': len(e.preguntas),
+            'respuestas': len(e.respuestas),
+            'fecha': e.fecha_creacion.strftime('%d/%m/%Y')
+        })
+    
+    return jsonify({
+        'total': paginacion.total,
+        'pagina': pagina,
+        'total_paginas': paginacion.pages,
+        'resultados': resultados
+    })
+
+
+@encuestas_bp.route('/encuestas-lista-ajax')
+@login_required
+def encuestas_lista_ajax():
+    """Retorna lista de encuestas en JSON para el modal (solo primeras 20)"""
+    encuestas = Encuesta.query.filter_by(usuario_id=current_user.id).order_by(Encuesta.fecha_creacion.desc()).limit(20).all()
+    
+    data = []
+    for e in encuestas:
+        data.append({
+            'id': e.id,
+            'titulo': e.titulo,
+            'preguntas': len(e.preguntas),
+            'respuestas': len(e.respuestas),
+            'estado': e.estado
+        })
+    
+    return jsonify({'encuestas': data})
+
+
+@encuestas_bp.route('/encuesta/<int:encuesta_id>/cargar-respuestas-modal')
+@login_required
+def cargar_respuestas_modal(encuesta_id):
+    """Retorna el HTML del formulario de carga para el modal"""
+    encuesta = Encuesta.query.get_or_404(encuesta_id)
+    preguntas = Pregunta.query.filter_by(encuesta_id=encuesta_id).order_by(Pregunta.orden).all()
+    
+    total_respuestas = Respuesta.query.filter_by(encuesta_id=encuesta_id).count()
+    if total_respuestas > 0:
+        identificadores = db.session.query(Respuesta.identificador_respuesta).filter_by(encuesta_id=encuesta_id).distinct().count()
+    else:
+        identificadores = 0
+    
+    return render_template('carga_respuestas_modal.html', 
+                         encuesta=encuesta, 
+                         preguntas=preguntas,
+                         total_respuestas=total_respuestas,
+                         identificadores=identificadores)
+
+
+@encuestas_bp.route('/encuesta/<int:encuesta_id>/cargar-respuestas-ajax', methods=['POST'])
+@login_required
+def cargar_respuestas_ajax(encuesta_id):
+    """Procesa la carga de respuestas via AJAX"""
+    try:
+        encuesta = Encuesta.query.get_or_404(encuesta_id)
+        
+        if encuesta.usuario_id != current_user.id:
+            return jsonify({'success': False, 'message': 'No tienes permiso'}), 403
+        
+        if 'archivo' not in request.files:
+            return jsonify({'success': False, 'message': 'No se seleccionó ningún archivo'}), 400
+        
+        archivo = request.files['archivo']
+        
+        if archivo.filename == '':
+            return jsonify({'success': False, 'message': 'No se seleccionó ningún archivo'}), 400
+        
+        allowed = {'xlsx', 'xls', 'csv'}
+        if not ('.' in archivo.filename and archivo.filename.rsplit('.', 1)[1].lower() in allowed):
+            return jsonify({'success': False, 'message': 'Formato no permitido. Use .xlsx, .xls o .csv'}), 400
+        
+        import pandas as pd
+        if archivo.filename.endswith('.csv'):
+            df = pd.read_csv(archivo)
+        else:
+            df = pd.read_excel(archivo)
+        
+        columnas_archivo = list(df.columns)
+        
+        mapeo = {}
+        for columna in columnas_archivo:
+            pregunta_id = request.form.get(f'mapping_{columna}')
+            if pregunta_id:
+                mapeo[columna] = int(pregunta_id)
+        
+        if not mapeo:
+            return jsonify({'success': False, 'message': 'Debes mapear al menos una columna a una pregunta'}), 400
+        
+        total_guardadas = 0
+        errores = []
+        
+        for idx, row in df.iterrows():
+            identificador = f"R{idx+1:04d}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            
+            for columna, pregunta_id in mapeo.items():
+                pregunta = Pregunta.query.get(pregunta_id)
+                if not pregunta:
+                    continue
+                
+                valor = row[columna]
+                if pd.isna(valor) or str(valor).strip() == '':
+                    continue
+                
+                valor_str = str(valor).strip()
+                
+                if pregunta.tipo == 'texto_libre':
+                    nueva_respuesta = Respuesta(
+                        encuesta_id=encuesta_id,
+                        pregunta_id=pregunta.id,
+                        texto_libre=valor_str,
+                        identificador_respuesta=identificador
+                    )
+                    db.session.add(nueva_respuesta)
+                    total_guardadas += 1
+                else:
+                    opcion = Opcion.query.filter_by(
+                        pregunta_id=pregunta.id,
+                        texto=valor_str
+                    ).first()
+                    
+                    if not opcion:
+                        opciones = Opcion.query.filter_by(pregunta_id=pregunta.id).all()
+                        for o in opciones:
+                            if valor_str.strip().lower() in o.texto.strip().lower() or o.texto.strip().lower() in valor_str.strip().lower():
+                                opcion = o
+                                break
+                    
+                    if opcion:
+                        nueva_respuesta = Respuesta(
+                            encuesta_id=encuesta_id,
+                            pregunta_id=pregunta.id,
+                            opcion_id=opcion.id,
+                            identificador_respuesta=identificador
+                        )
+                        db.session.add(nueva_respuesta)
+                        total_guardadas += 1
+                    else:
+                        errores.append(f"Fila {idx+1}: No se encontró la opción '{valor_str}'")
+        
+        db.session.commit()
+        
+        mensaje = f'✅ {total_guardadas} respuestas cargadas exitosamente'
+        if errores:
+            mensaje += f' ⚠️ {len(errores)} errores encontrados'
+        
+        return jsonify({
+            'success': True,
+            'message': mensaje,
+            'close_modal': True,
+            'reload': True
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# ============================================
+# RUTAS AJAX - CRUD
+# ============================================
+
+@encuestas_bp.route('/crear-encuesta-ajax', methods=['POST'])
+@login_required
+def crear_encuesta_ajax():
+    try:
+        titulo = request.form.get('titulo')
+        descripcion = request.form.get('descripcion')
+        
+        if not titulo:
+            return jsonify({'success': False, 'message': 'El título es obligatorio'}), 400
+        
+        nueva_encuesta = Encuesta(
+            titulo=titulo,
+            descripcion=descripcion,
+            usuario_id=current_user.id
+        )
+        db.session.add(nueva_encuesta)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': '✅ Encuesta creada exitosamente',
+            'redirect': url_for('encuestas.agregar_pregunta', encuesta_id=nueva_encuesta.id)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@encuestas_bp.route('/encuesta/<int:encuesta_id>/editar-ajax', methods=['POST'])
+@login_required
+def editar_encuesta_ajax(encuesta_id):
+    try:
+        encuesta = Encuesta.query.get_or_404(encuesta_id)
+        
+        if encuesta.usuario_id != current_user.id:
+            return jsonify({'success': False, 'message': 'No tienes permiso'}), 403
+        
+        titulo = request.form.get('titulo')
+        descripcion = request.form.get('descripcion')
+        estado = request.form.get('estado', 'activa')
+        confirmar_eliminar = request.form.get('confirmar_eliminar') == 'on'
+        
+        if not titulo:
+            return jsonify({'success': False, 'message': 'El título es obligatorio'}), 400
+        
+        total_respuestas = Respuesta.query.filter_by(encuesta_id=encuesta_id).count()
+        
+        if total_respuestas > 0 and not confirmar_eliminar:
+            return jsonify({'success': False, 'message': 'Debes confirmar la eliminación de respuestas'}), 400
+        
+        if total_respuestas > 0 and confirmar_eliminar:
+            Respuesta.query.filter_by(encuesta_id=encuesta_id).delete()
+        
+        encuesta.titulo = titulo
+        encuesta.descripcion = descripcion
+        encuesta.estado = estado
+        encuesta.fecha_actualizacion = datetime.utcnow()
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': '✅ Encuesta actualizada exitosamente',
+            'redirect': url_for('encuestas.mis_encuestas')
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@encuestas_bp.route('/pregunta/<int:pregunta_id>/editar-ajax', methods=['POST'])
+@login_required
+def editar_pregunta_ajax(pregunta_id):
+    try:
+        pregunta = Pregunta.query.get_or_404(pregunta_id)
+        encuesta = pregunta.encuesta
+        
+        if encuesta.usuario_id != current_user.id:
+            return jsonify({'success': False, 'message': 'No tienes permiso'}), 403
+        
+        texto = request.form.get('texto')
+        tipo = request.form.get('tipo')
+        requerida = request.form.get('requerida') == 'on'
+        ayudante = request.form.get('ayudante')
+        confirmar_eliminar = request.form.get('confirmar_eliminar') == 'on'
+        
+        if not texto or not tipo:
+            return jsonify({'success': False, 'message': 'Texto y tipo son obligatorios'}), 400
+        
+        total_respuestas = Respuesta.query.filter_by(encuesta_id=encuesta.id).count()
+        
+        if total_respuestas > 0 and not confirmar_eliminar:
+            return jsonify({'success': False, 'message': 'Debes confirmar la eliminación de respuestas'}), 400
+        
+        if total_respuestas > 0 and confirmar_eliminar:
+            Respuesta.query.filter_by(encuesta_id=encuesta.id).delete()
+        
+        pregunta.texto = texto
+        pregunta.tipo = tipo
+        pregunta.requerida = requerida
+        pregunta.ayudante = ayudante
+        
+        db.session.commit()
+        
+        response = {
+            'success': True,
+            'message': '✅ Pregunta actualizada exitosamente'
+        }
+        
+        if pregunta.tiene_opciones():
+            response['redirect'] = url_for('encuestas.editar_opciones', pregunta_id=pregunta.id)
+        else:
+            response['redirect'] = url_for('encuestas.agregar_pregunta', encuesta_id=encuesta.id)
+        
+        return jsonify(response)
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@encuestas_bp.route('/pregunta/<int:pregunta_id>/opciones/editar-ajax', methods=['POST'])
+@login_required
+def editar_opciones_ajax(pregunta_id):
+    try:
+        pregunta = Pregunta.query.get_or_404(pregunta_id)
+        encuesta = pregunta.encuesta
+        
+        if encuesta.usuario_id != current_user.id:
+            return jsonify({'success': False, 'message': 'No tienes permiso'}), 403
+        
+        confirmar_eliminar = request.form.get('confirmar_eliminar') == 'on'
+        total_respuestas = Respuesta.query.filter_by(encuesta_id=encuesta.id).count()
+        
+        if total_respuestas > 0 and not confirmar_eliminar:
+            return jsonify({'success': False, 'message': 'Debes confirmar la eliminación de respuestas'}), 400
+        
+        if total_respuestas > 0 and confirmar_eliminar:
+            Respuesta.query.filter_by(encuesta_id=encuesta.id).delete()
+        
+        opciones_ids = request.form.getlist('opcion_id')
+        opciones_texto = request.form.getlist('opcion_texto')
+        opciones_valor = request.form.getlist('opcion_valor')
+        opciones_eliminar = request.form.getlist('opcion_eliminar')
+        
+        for opcion_id in opciones_eliminar:
+            opcion = Opcion.query.get(int(opcion_id))
+            if opcion:
+                db.session.delete(opcion)
+        
+        for i in range(len(opciones_texto)):
+            if opciones_texto[i].strip():
+                if i < len(opciones_ids) and opciones_ids[i]:
+                    opcion = Opcion.query.get(int(opciones_ids[i]))
+                    if opcion:
+                        opcion.texto = opciones_texto[i].strip()
+                        opcion.valor = opciones_valor[i].strip() if i < len(opciones_valor) and opciones_valor[i] else None
+                        opcion.orden = i + 1
+                else:
+                    nueva_opcion = Opcion(
+                        pregunta_id=pregunta_id,
+                        texto=opciones_texto[i].strip(),
+                        valor=opciones_valor[i].strip() if i < len(opciones_valor) and opciones_valor[i] else None,
+                        orden=i + 1
+                    )
+                    db.session.add(nueva_opcion)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': '✅ Opciones actualizadas exitosamente',
+            'redirect': url_for('encuestas.agregar_pregunta', encuesta_id=encuesta.id)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@encuestas_bp.route('/encuesta/<int:encuesta_id>/eliminar-ajax', methods=['POST'])
+@login_required
+def eliminar_encuesta_ajax(encuesta_id):
+    try:
+        encuesta = Encuesta.query.get_or_404(encuesta_id)
+        
+        if encuesta.usuario_id != current_user.id:
+            return jsonify({'success': False, 'message': 'No tienes permiso'}), 403
+        
+        db.session.delete(encuesta)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': '✅ Encuesta eliminada exitosamente'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@encuestas_bp.route('/pregunta/<int:pregunta_id>/eliminar-ajax', methods=['POST'])
+@login_required
+def eliminar_pregunta_ajax(pregunta_id):
+    try:
+        pregunta = Pregunta.query.get_or_404(pregunta_id)
+        encuesta = pregunta.encuesta
+        
+        if encuesta.usuario_id != current_user.id:
+            return jsonify({'success': False, 'message': 'No tienes permiso'}), 403
+        
+        db.session.delete(pregunta)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': '✅ Pregunta eliminada exitosamente'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@encuestas_bp.route('/encuesta/<int:encuesta_id>/agregar-pregunta-ajax', methods=['POST'])
+@login_required
+def agregar_pregunta_ajax(encuesta_id):
+    try:
+        encuesta = Encuesta.query.get_or_404(encuesta_id)
+        
+        if encuesta.usuario_id != current_user.id:
+            return jsonify({'success': False, 'message': 'No tienes permiso'}), 403
+        
+        texto = request.form.get('texto')
+        tipo = request.form.get('tipo')
+        requerida = request.form.get('requerida') == 'on'
+        ayudante = request.form.get('ayudante')
+        
+        if not texto or not tipo:
+            return jsonify({'success': False, 'message': 'Texto y tipo son obligatorios'}), 400
+        
+        nueva_pregunta = Pregunta(
+            encuesta_id=encuesta_id,
+            texto=texto,
+            tipo=tipo,
+            requerida=requerida,
+            ayudante=ayudante,
+            orden=Pregunta.query.filter_by(encuesta_id=encuesta_id).count() + 1
+        )
+        db.session.add(nueva_pregunta)
+        db.session.commit()
+        
+        response = {
+            'success': True,
+            'message': '✅ Pregunta agregada exitosamente'
+        }
+        
+        if tipo in ['opcion_unica', 'opcion_multiple', 'escala_likert', 'seleccion_si_no']:
+            response['redirect'] = url_for('encuestas.agregar_opciones', pregunta_id=nueva_pregunta.id)
+        else:
+            response['redirect'] = url_for('encuestas.agregar_pregunta', encuesta_id=encuesta_id)
+        
+        return jsonify(response)
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@encuestas_bp.route('/pregunta/<int:pregunta_id>/agregar-opciones-ajax', methods=['POST'])
+@login_required
+def agregar_opciones_ajax(pregunta_id):
+    try:
+        pregunta = Pregunta.query.get_or_404(pregunta_id)
+        encuesta = pregunta.encuesta
+        
+        if encuesta.usuario_id != current_user.id:
+            return jsonify({'success': False, 'message': 'No tienes permiso'}), 403
+        
+        opciones_texto = request.form.getlist('opcion_texto')
+        opciones_valor = request.form.getlist('opcion_valor')
+        
+        if not opciones_texto or not opciones_texto[0]:
+            return jsonify({'success': False, 'message': 'Debes agregar al menos una opción'}), 400
+        
+        for i, texto in enumerate(opciones_texto):
+            if texto.strip():
+                opcion = Opcion(
+                    pregunta_id=pregunta_id,
+                    texto=texto.strip(),
+                    valor=opciones_valor[i].strip() if i < len(opciones_valor) and opciones_valor[i] else None,
+                    orden=i + 1
+                )
+                db.session.add(opcion)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': '✅ Opciones agregadas exitosamente',
+            'redirect': url_for('encuestas.agregar_pregunta', encuesta_id=encuesta.id)
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500

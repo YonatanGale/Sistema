@@ -9,7 +9,6 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(128), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    # Relaciones
     encuestas = db.relationship('Encuesta', backref='creador', lazy=True)
     
     def __repr__(self):
@@ -23,10 +22,16 @@ class Encuesta(db.Model):
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     usuario_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    estado = db.Column(db.String(20), default='activa')  # activa, cerrada, archivada
+    estado = db.Column(db.String(20), default='activa')
     
-    # Relaciones
     preguntas = db.relationship('Pregunta', backref='encuesta', lazy=True, cascade='all, delete-orphan')
+    respuestas = db.relationship('Respuesta', backref='encuesta', lazy=True, cascade='all, delete-orphan')
+    
+    def total_preguntas(self):
+        return len(self.preguntas)
+    
+    def total_respuestas(self):
+        return len(self.respuestas)
     
     def __repr__(self):
         return f'<Encuesta {self.titulo}>'
@@ -36,14 +41,16 @@ class Pregunta(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     encuesta_id = db.Column(db.Integer, db.ForeignKey('encuesta.id'), nullable=False)
     texto = db.Column(db.Text, nullable=False)
-    tipo = db.Column(db.String(30), nullable=False)  
-    # Tipos: 'opcion_unica', 'opcion_multiple', 'escala_likert', 'texto_libre', 'seleccion_si_no'
+    tipo = db.Column(db.String(30), nullable=False)
     orden = db.Column(db.Integer, default=0)
     requerida = db.Column(db.Boolean, default=True)
-    ayudante = db.Column(db.String(200))  # Texto de ayuda para la pregunta
+    ayudante = db.Column(db.String(200))
     
-    # Relaciones
     opciones = db.relationship('Opcion', backref='pregunta', lazy=True, cascade='all, delete-orphan')
+    respuestas = db.relationship('Respuesta', backref='pregunta', lazy=True, cascade='all, delete-orphan')
+    
+    def tiene_opciones(self):
+        return self.tipo in ['opcion_unica', 'opcion_multiple', 'escala_likert', 'seleccion_si_no']
     
     def __repr__(self):
         return f'<Pregunta {self.texto[:50]}>'
@@ -53,7 +60,7 @@ class Opcion(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     pregunta_id = db.Column(db.Integer, db.ForeignKey('pregunta.id'), nullable=False)
     texto = db.Column(db.String(200), nullable=False)
-    valor = db.Column(db.String(50))  # Para escalas Likert: '1', '2', '3', '4', '5'
+    valor = db.Column(db.String(50))
     orden = db.Column(db.Integer, default=0)
     
     def __repr__(self):
@@ -64,10 +71,12 @@ class Respuesta(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     encuesta_id = db.Column(db.Integer, db.ForeignKey('encuesta.id'), nullable=False)
     pregunta_id = db.Column(db.Integer, db.ForeignKey('pregunta.id'), nullable=False)
-    opcion_id = db.Column(db.Integer, db.ForeignKey('opcion.id'), nullable=True)  # Para respuestas cerradas
-    texto_libre = db.Column(db.Text, nullable=True)  # Para respuestas abiertas
+    opcion_id = db.Column(db.Integer, db.ForeignKey('opcion.id'), nullable=True)
+    texto_libre = db.Column(db.Text, nullable=True)
     fecha_respuesta = db.Column(db.DateTime, default=datetime.utcnow)
-    identificador_respuesta = db.Column(db.String(50))  # Para agrupar respuestas de un mismo encuestado
+    identificador_respuesta = db.Column(db.String(50))
+    
+    opcion = db.relationship('Opcion', backref='respuestas', lazy=True)
     
     def __repr__(self):
         return f'<Respuesta {self.id}>'
