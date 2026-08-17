@@ -14,10 +14,34 @@
                class="btn btn-custom btn-custom-primary">
                 <i class="bi bi-upload"></i> Cargar más
             </a>
-            <a href="{{ url_for('respuestas.exportar_respuestas', encuesta_id=encuesta.id) }}" 
-               class="btn btn-custom btn-success">
-                <i class="bi bi-file-earmark-excel"></i> Exportar
-            </a>
+            
+            <!-- Menú de exportación -->
+            <div class="btn-group">
+                <button type="button" class="btn btn-custom btn-success dropdown-toggle" 
+                        data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-download"></i> Exportar
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li>
+                        <a class="dropdown-item" href="{{ url_for('respuestas.exportar_respuestas', encuesta_id=encuesta.id) }}">
+                            <i class="bi bi-file-earmark-excel"></i> Todas las respuestas
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="{{ url_for('respuestas.exportar_cuantitativos', encuesta_id=encuesta.id) }}">
+                            <i class="bi bi-bar-chart"></i> Datos cuantitativos
+                            <small class="text-muted d-block">Preguntas cerradas + estadísticas</small>
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="{{ url_for('respuestas.exportar_cualitativos', encuesta_id=encuesta.id) }}">
+                            <i class="bi bi-chat-text"></i> Datos cualitativos
+                            <small class="text-muted d-block">Preguntas abiertas (texto libre)</small>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
             <button class="btn btn-custom btn-custom-danger" 
                     onclick="eliminarTodasRespuestas({{ encuesta.id }})">
                 <i class="bi bi-trash"></i> Eliminar todas
@@ -25,6 +49,7 @@
         </div>
     </div>
 
+    <!-- Mensajes de alerta -->
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             {% for category, message in messages %}
@@ -36,9 +61,13 @@
         {% endif %}
     {% endwith %}
 
+    <!-- Contenido -->
     {% if respuestas_agrupadas %}
         <div class="alert alert-info">
             <i class="bi bi-people"></i> <strong>{{ total_encuestados }}</strong> encuestados respondieron
+            <span class="badge bg-primary ms-2">
+                <i class="bi bi-question-circle"></i> {{ preguntas|length }} preguntas
+            </span>
         </div>
 
         <div class="table-responsive">
@@ -188,7 +217,7 @@ function eliminarTodasRespuestas(encuestaId) {
 }
 
 // ============================================
-// MOSTRAR MENSAJES (sin depender de EncuestasApp)
+// MOSTRAR MENSAJES
 // ============================================
 
 function mostrarMensaje(mensaje, tipo = 'info') {

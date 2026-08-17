@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from app import db
 from app.models import Encuesta, Pregunta, Opcion, Respuesta
+from app.utils.exportar_datos import exportar_datos_cualitativos, exportar_datos_cuantitativos
 from werkzeug.utils import secure_filename
 import os
 import pandas as pd
@@ -531,3 +532,59 @@ def cargar_respuestas_ajax(encuesta_id):
         
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# ============================================
+# RUTA: EXPORTAR DATOS CUANTITATIVOS
+# ============================================
+
+@respuestas_bp.route('/encuesta/<int:encuesta_id>/exportar/cuantitativos')
+@login_required
+def exportar_cuantitativos(encuesta_id):
+    """Exporta preguntas cuantitativas con todas las opciones posibles y estadísticas"""
+    encuesta = Encuesta.query.get_or_404(encuesta_id)
+    
+    if encuesta.usuario_id != current_user.id:
+        flash('No tienes permiso para exportar estos datos', 'danger')
+        return redirect(url_for('encuestas.mis_encuestas'))
+    
+    output = exportar_datos_cuantitativos(encuesta_id)
+    
+    if output is None:
+        flash('⚠️ No hay preguntas cuantitativas (cerradas) en esta encuesta', 'warning')
+        return redirect(url_for('respuestas.ver_respuestas', encuesta_id=encuesta_id))
+    
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'datos_cuantitativos_{encuesta.titulo[:30]}_{datetime.now().strftime("%Y%m%d")}.xlsx'
+    )
+
+
+# ============================================
+# RUTA: EXPORTAR DATOS CUALITATIVOS
+# ============================================
+
+@respuestas_bp.route('/encuesta/<int:encuesta_id>/exportar/cualitativos')
+@login_required
+def exportar_cualitativos(encuesta_id):
+    """Exporta preguntas cualitativas y sus respuestas"""
+    encuesta = Encuesta.query.get_or_404(encuesta_id)
+    
+    if encuesta.usuario_id != current_user.id:
+        flash('No tienes permiso para exportar estos datos', 'danger')
+        return redirect(url_for('encuestas.mis_encuestas'))
+    
+    output = exportar_datos_cualitativos(encuesta_id)
+    
+    if output is None:
+        flash('⚠️ No hay preguntas cualitativas (texto libre) en esta encuesta', 'warning')
+        return redirect(url_for('respuestas.ver_respuestas', encuesta_id=encuesta_id))
+    
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'datos_cualitativos_{encuesta.titulo[:30]}_{datetime.now().strftime("%Y%m%d")}.xlsx'
+    )
