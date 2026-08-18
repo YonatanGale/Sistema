@@ -20,6 +20,7 @@
             </ul>
         </div>
 
+        <!-- Drop Zone -->
         <div class="drop-zone" id="dropZone">
             <i class="bi bi-cloud-arrow-up"></i>
             <h5 class="mt-3">Arrastra tu archivo aquí</h5>
@@ -27,7 +28,8 @@
             <input type="file" class="d-none" id="archivo" name="archivo" accept=".xlsx,.xls,.csv" required>
         </div>
 
-        <div class="file-info mt-3" id="fileInfo">
+        <!-- Info del archivo -->
+        <div class="file-info mt-3" id="fileInfo" style="display: none;">
             <div class="alert alert-success">
                 <i class="bi bi-file-earmark-excel"></i>
                 <span id="fileName">archivo.xlsx</span>
@@ -37,17 +39,41 @@
             </div>
         </div>
 
-        <div class="mapping-container mt-3" id="mappingContainer">
-            <h6 class="fw-bold"><i class="bi bi-diagram-3"></i> Mapeo de Columnas</h6>
-            <p class="text-muted small">Selecciona qué pregunta de tu encuesta corresponde a cada columna del archivo</p>
+        <!-- Loading -->
+        <div id="loadingMessage" style="display: none; text-align: center; padding: 20px;">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+            <p class="text-muted mt-2">Procesando archivo...</p>
+        </div>
+
+        <!-- Mapeo -->
+        <div class="mapping-container mt-3" id="mappingContainer" style="display: none;">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h6 class="fw-bold"><i class="bi bi-diagram-3"></i> Mapeo de Columnas</h6>
+                    <p class="text-muted small">Selecciona qué pregunta corresponde a cada columna.<br>
+                    <span class="text-danger"><i class="bi bi-exclamation-triangle"></i> Las columnas marcadas como "Descartar" serán ignoradas.</span></p>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="seleccionarTodasColumnas()">
+                        <i class="bi bi-check-all"></i> Seleccionar todas
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="descartarTodasColumnas()">
+                        <i class="bi bi-x-circle"></i> Descartar todas
+                    </button>
+                </div>
+            </div>
             <div id="mappingFields"></div>
         </div>
 
-        <div class="preview-container mt-3" id="previewContainer">
+        <!-- Previsualización -->
+        <div class="preview-container mt-3" id="previewContainer" style="display: none;">
             <h6 class="fw-bold"><i class="bi bi-eye"></i> Previsualización del Archivo</h6>
             <div class="table-responsive" id="previewTable"></div>
         </div>
 
+        <!-- Botones -->
         <div class="d-flex justify-content-between mt-4">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                 <i class="bi bi-x-circle"></i> Cancelar
@@ -60,83 +86,434 @@
 </div>
 
 <script>
-window.previsualizarArchivo = function(file) {
-    const formData = new FormData();
-    formData.append('archivo', file);
+// ============================================
+// SCRIPT PRINCIPAL
+// ============================================
+(function() {
+    'use strict';
 
-    fetch('/encuesta/{{ encuesta.id }}/previsualizar', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            alert('Error: ' + data.error);
+    const ENCUESTA_ID = {{ encuesta.id }};
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('archivo');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    const btnSubir = document.getElementById('btnSubir');
+    const mappingContainer = document.getElementById('mappingContainer');
+    const previewContainer = document.getElementById('previewContainer');
+    const mappingFields = document.getElementById('mappingFields');
+    const previewTable = document.getElementById('previewTable');
+    const loadingMessage = document.getElementById('loadingMessage');
+    const form = document.getElementById('cargarRespuestasForm');
+
+    // ============================================
+    // OBTENER CSRF TOKEN
+    // ============================================
+    function getCsrfToken() {
+        let token = document.querySelector('input[name="csrf_token"]')?.value;
+        if (!token) {
+            token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        }
+        return token || '';
+    }
+
+    // ============================================
+    // MOSTRAR ERROR
+    // ============================================
+    function mostrarError(mensaje) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-danger alert-dismissible fade show mt-3';
+        alertDiv.innerHTML = `
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <strong>Error:</strong> ${mensaje}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        const parent = dropZone.parentNode;
+        parent.insertBefore(alertDiv, dropZone);
+        setTimeout(() => {
+            if (alertDiv.parentNode) alertDiv.remove();
+        }, 8000);
+    }
+
+    // ============================================
+    // MOSTRAR ARCHIVO
+    // ============================================
+    function mostrarArchivo(file) {
+        const extensiones = ['xlsx', 'xls', 'csv'];
+        const ext = file.name.split('.').pop().toLowerCase();
+
+        if (!extensiones.includes(ext)) {
+            mostrarError('Formato no permitido. Use .xlsx, .xls o .csv');
+            fileInput.value = '';
             return;
         }
 
-        const mappingContainer = document.getElementById('mappingContainer');
-        const previewContainer = document.getElementById('previewContainer');
-        const mappingFields = document.getElementById('mappingFields');
-        const previewTable = document.getElementById('previewTable');
+        fileInfo.style.display = 'block';
+        fileName.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+        previsualizarArchivo(file);
+    }
 
-        let mappingHTML = '';
-        data.columnas.forEach(columna => {
-            mappingHTML += `
-                <div class="row mb-2">
-                    <div class="col-md-4">
-                        <strong>${columna}</strong>
-                    </div>
-                    <div class="col-md-8">
-                        <select class="form-select form-control-custom" name="mapping_${columna}">
-                            <option value="">-- Selecciona una pregunta --</option>
-                            ${data.preguntas.map(p => 
-                                `<option value="${p.id}">${p.texto} (${p.tipo})</option>`
-                            ).join('')}
-                        </select>
-                    </div>
-                </div>
-            `;
-        });
-        mappingFields.innerHTML = mappingHTML;
-        mappingContainer.classList.add('show');
+    // ============================================
+    // PREVISUALIZAR ARCHIVO (AJAX)
+    // ============================================
+    function previsualizarArchivo(file) {
+        loadingMessage.style.display = 'block';
+        mappingContainer.style.display = 'none';
+        previewContainer.style.display = 'none';
+        btnSubir.disabled = true;
 
-        if (data.preview && data.preview.length > 0) {
-            let previewHTML = `<table class="table table-custom table-sm"><thead><tr>`;
-            data.columnas.forEach(col => {
-                previewHTML += `<th>${col}</th>`;
-            });
-            previewHTML += `</tr></thead><tbody>`;
-            data.preview.forEach(row => {
-                previewHTML += `<tr>`;
-                data.columnas.forEach(col => {
-                    previewHTML += `<td>${row[col] || ''}</td>`;
+        const formData = new FormData();
+        formData.append('archivo', file, file.name);
+
+        const csrfToken = getCsrfToken();
+
+        fetch('/encuesta/' + ENCUESTA_ID + '/previsualizar', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': csrfToken
+            }
+        })
+        .then(response => {
+            console.log('📥 Status:', response.status);
+            if (!response.ok) {
+                return response.text().then(text => {
+                    console.error('❌ Respuesta del servidor:', text);
+                    throw new Error('Error ' + response.status + ': ' + text.substring(0, 200));
                 });
-                previewHTML += `</tr>`;
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('📊 Datos recibidos:', data);
+            loadingMessage.style.display = 'none';
+
+            if (data.error) {
+                mostrarError(data.error);
+                return;
+            }
+
+            if (!data.columnas || data.columnas.length === 0) {
+                mostrarError('El archivo no tiene columnas válidas');
+                return;
+            }
+
+            // ============================================
+            // LIMPIAR DATOS: Reemplazar NaN, null, undefined
+            // ============================================
+            if (data.preview) {
+                data.preview = data.preview.map(row => {
+                    const newRow = {};
+                    Object.keys(row).forEach(key => {
+                        const val = row[key];
+                        if (val === null || val === undefined || (typeof val === 'number' && isNaN(val))) {
+                            newRow[key] = '';
+                        } else {
+                            newRow[key] = val;
+                        }
+                    });
+                    return newRow;
+                });
+            }
+
+            // ============================================
+            // GENERAR MAPEO DE COLUMNAS CON CHECKBOX "DESCARTAR"
+            // ============================================
+            let mappingHTML = '';
+            data.columnas.forEach((columna, index) => {
+                mappingHTML += `
+                    <div class="row mb-2 align-items-center" data-columna="${columna}">
+                        <div class="col-md-3">
+                            <strong>${columna}</strong>
+                        </div>
+                        <div class="col-md-6">
+                            <select class="form-select form-control-custom" name="mapping_${columna}" id="select_${index}">
+                                <option value="">-- Selecciona una pregunta --</option>
+                                ${data.preguntas.map(p => 
+                                    `<option value="${p.id}">${p.texto} (${p.tipo})</option>`
+                                ).join('')}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="descartar_${index}" 
+                                       name="descartar_${columna}" value="true" 
+                                       onchange="toggleColumna(${index})">
+                                <label class="form-check-label text-danger" for="descartar_${index}">
+                                    <i class="bi bi-x-circle"></i> Descartar
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                `;
             });
-            previewHTML += `</tbody></table>`;
-            previewTable.innerHTML = previewHTML;
-            previewContainer.classList.add('show');
+            mappingFields.innerHTML = mappingHTML;
+            mappingContainer.style.display = 'block';
+
+            // ============================================
+            // GENERAR PREVISUALIZACIÓN
+            // ============================================
+            if (data.preview && data.preview.length > 0) {
+                let previewHTML = `<table class="table table-custom table-sm"><thead><tr>`;
+                data.columnas.forEach(col => {
+                    previewHTML += `<th>${col}</th>`;
+                });
+                previewHTML += `</tr></thead><tbody>`;
+                data.preview.forEach(row => {
+                    previewHTML += `<tr>`;
+                    data.columnas.forEach(col => {
+                        const value = row[col] !== undefined && row[col] !== null && row[col] !== '' ? row[col] : '';
+                        previewHTML += `<td>${value}</td>`;
+                    });
+                    previewHTML += `</tr>`;
+                });
+                previewHTML += `</tbody></table>`;
+                previewTable.innerHTML = previewHTML;
+                previewContainer.style.display = 'block';
+            }
+
+            btnSubir.disabled = false;
+            console.log('✅ Previsualización completada');
+        })
+        .catch(error => {
+            console.error('❌ Error:', error);
+            loadingMessage.style.display = 'none';
+            mostrarError('Error al previsualizar: ' + error.message);
+        });
+    }
+
+    // ============================================
+    // FUNCIONES PARA DESCARTAR COLUMNAS
+    // ============================================
+    window.toggleColumna = function(index) {
+        const checkbox = document.getElementById('descartar_' + index);
+        const select = document.getElementById('select_' + index);
+        const row = select.closest('.row');
+        
+        if (checkbox.checked) {
+            // Descartar: deshabilitar select y opacar la fila
+            select.disabled = true;
+            select.value = '';
+            row.style.opacity = '0.5';
+            row.style.backgroundColor = '#f8f9fa';
+        } else {
+            // Activar: habilitar select y restaurar opacidad
+            select.disabled = false;
+            row.style.opacity = '1';
+            row.style.backgroundColor = 'transparent';
         }
+    };
 
-        document.getElementById('btnSubir').disabled = false;
-    })
-    .catch(error => {
-        alert('Error al previsualizar el archivo: ' + error);
-    });
-};
+    window.seleccionarTodasColumnas = function() {
+        const selects = document.querySelectorAll('#mappingFields select');
+        const checkboxes = document.querySelectorAll('#mappingFields input[type="checkbox"]');
+        
+        selects.forEach(select => {
+            select.disabled = false;
+        });
+        
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = false;
+            const row = checkbox.closest('.row');
+            if (row) {
+                row.style.opacity = '1';
+                row.style.backgroundColor = 'transparent';
+            }
+        });
+    };
 
-window.limpiarArchivo = function() {
-    const fileInput = document.getElementById('archivo');
-    const fileInfo = document.getElementById('fileInfo');
-    const btnSubir = document.getElementById('btnSubir');
-    const previewContainer = document.getElementById('previewContainer');
-    const mappingContainer = document.getElementById('mappingContainer');
-    
-    if (fileInput) fileInput.value = '';
-    if (fileInfo) fileInfo.classList.remove('show');
-    if (btnSubir) btnSubir.disabled = true;
-    if (previewContainer) previewContainer.classList.remove('show');
-    if (mappingContainer) mappingContainer.classList.remove('show');
-};
+    window.descartarTodasColumnas = function() {
+        const selects = document.querySelectorAll('#mappingFields select');
+        const checkboxes = document.querySelectorAll('#mappingFields input[type="checkbox"]');
+        
+        selects.forEach(select => {
+            select.disabled = true;
+            select.value = '';
+        });
+        
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = true;
+            const row = checkbox.closest('.row');
+            if (row) {
+                row.style.opacity = '0.5';
+                row.style.backgroundColor = '#f8f9fa';
+            }
+        });
+    };
+
+    // ============================================
+    // EVENTOS DEL DROP ZONE
+    // ============================================
+    if (dropZone) {
+        dropZone.addEventListener('click', function(e) {
+            e.stopPropagation();
+            fileInput.click();
+        });
+
+        dropZone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                const file = e.dataTransfer.files[0];
+                fileInput.files = e.dataTransfer.files;
+                mostrarArchivo(file);
+            }
+        });
+    }
+
+    if (fileInput) {
+        fileInput.addEventListener('change', function() {
+            if (this.files.length) {
+                mostrarArchivo(this.files[0]);
+            }
+        });
+    }
+
+    // ============================================
+    // ENVÍO DEL FORMULARIO (AJAX) - SOLO COLUMNAS NO DESCARTADAS
+    // ============================================
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(form);
+            const csrfToken = getCsrfToken();
+
+            // Verificar archivo
+            const archivo = form.querySelector('input[name="archivo"]');
+            if (!archivo || !archivo.files || archivo.files.length === 0) {
+                mostrarError('⚠️ Debes seleccionar un archivo');
+                return;
+            }
+
+            // Verificar que al menos una columna esté mapeada (no descartada)
+            const selects = form.querySelectorAll('select[name^="mapping_"]');
+            let mapeado = false;
+            selects.forEach(select => {
+                // Verificar si la columna está descartada
+                const index = select.id.replace('select_', '');
+                const checkbox = document.getElementById('descartar_' + index);
+                if (!checkbox || !checkbox.checked) {
+                    if (select.value) {
+                        mapeado = true;
+                    }
+                }
+            });
+
+            if (!mapeado) {
+                mostrarError('⚠️ Debes mapear al menos una columna a una pregunta (que no esté descartada)');
+                return;
+            }
+
+            // Eliminar campos de columnas descartadas del FormData
+            const checkboxes = form.querySelectorAll('input[type="checkbox"][name^="descartar_"]');
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    const columna = checkbox.name.replace('descartar_', '');
+                    const select = form.querySelector(`select[name="mapping_${columna}"]`);
+                    if (select) {
+                        select.disabled = true;
+                        select.value = '';
+                    }
+                }
+            });
+
+            const btn = form.querySelector('button[type="submit"]');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Subiendo...';
+
+            console.log('📤 Enviando formulario...');
+
+            fetch('/encuesta/' + ENCUESTA_ID + '/cargar-respuestas-ajax', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': csrfToken
+                }
+            })
+            .then(response => {
+                console.log('📥 Status:', response.status);
+                if (!response.ok) {
+                    return response.text().then(text => {
+                        console.error('❌ Respuesta:', text);
+                        throw new Error('Error ' + response.status + ': ' + text.substring(0, 200));
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('📊 Respuesta:', data);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+
+                if (data.success) {
+                    const modal = document.getElementById('modalCargarRespuestas');
+                    if (modal) {
+                        const bsModal = bootstrap.Modal.getInstance(modal);
+                        if (bsModal) bsModal.hide();
+                    }
+                    mostrarExito(data.message || '✅ Respuestas cargadas exitosamente');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    mostrarError(data.message || '❌ Error al procesar');
+                }
+            })
+            .catch(error => {
+                console.error('❌ Error:', error);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                mostrarError('Error al enviar: ' + error.message);
+            });
+        });
+    }
+
+    // ============================================
+    // MOSTRAR ÉXITO
+    // ============================================
+    function mostrarExito(mensaje) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-success alert-dismissible fade show mt-3';
+        alertDiv.innerHTML = `
+            <i class="bi bi-check-circle-fill"></i>
+            <strong>Éxito:</strong> ${mensaje}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        const parent = dropZone.parentNode;
+        parent.insertBefore(alertDiv, dropZone);
+        setTimeout(() => {
+            if (alertDiv.parentNode) alertDiv.remove();
+        }, 5000);
+    }
+
+    // ============================================
+    // LIMPIAR ARCHIVO
+    // ============================================
+    window.limpiarArchivo = function() {
+        fileInput.value = '';
+        fileInfo.style.display = 'none';
+        mappingContainer.style.display = 'none';
+        previewContainer.style.display = 'none';
+        loadingMessage.style.display = 'none';
+        btnSubir.disabled = true;
+        mappingFields.innerHTML = '';
+        previewTable.innerHTML = '';
+        if (dropZone) dropZone.classList.remove('dragover');
+        console.log('🧹 Archivo limpiado');
+    };
+
+    window.previsualizarArchivo = previsualizarArchivo;
+
+    console.log('✅ Script inicializado. Encuesta ID:', ENCUESTA_ID);
+
+})();
 </script>

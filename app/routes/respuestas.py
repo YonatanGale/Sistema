@@ -2,7 +2,6 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import login_required, current_user
 from app import db
 from app.models import Encuesta, Pregunta, Opcion, Respuesta
-from app.utils.exportar_datos import exportar_datos_cualitativos, exportar_datos_cuantitativos
 from werkzeug.utils import secure_filename
 import os
 import pandas as pd
@@ -124,6 +123,9 @@ def cargar_respuestas(encuesta_id):
             else:
                 df = pd.read_excel(archivo)
             
+            # Reemplazar NaN por None
+            df = df.where(pd.notnull(df), None)
+            
             columnas_archivo = list(df.columns)
             
             mapeo = {}
@@ -151,7 +153,7 @@ def cargar_respuestas(encuesta_id):
                     
                     valor = row[columna]
                     
-                    if pd.isna(valor) or str(valor).strip() == '':
+                    if valor is None or pd.isna(valor) or str(valor).strip() == '':
                         continue
                     
                     valor_str = str(valor).strip()
@@ -216,7 +218,7 @@ def cargar_respuestas(encuesta_id):
 
 
 # ============================================
-# RUTA: PREVISUALIZAR ARCHIVO
+# RUTA: PREVISUALIZAR ARCHIVO (CORREGIDA - maneja NaN)
 # ============================================
 
 @respuestas_bp.route('/encuesta/<int:encuesta_id>/previsualizar', methods=['POST'])
@@ -236,23 +238,54 @@ def previsualizar_archivo(encuesta_id):
         return jsonify({'error': 'No se seleccionó ningún archivo'}), 400
     
     try:
+        import pandas as pd
+        import io
+        
+        # Leer el archivo correctamente
         if archivo.filename.endswith('.csv'):
-            df = pd.read_csv(archivo)
+            content = archivo.stream.read().decode('utf-8')
+            df = pd.read_csv(io.StringIO(content))
         else:
             df = pd.read_excel(archivo)
         
-        columnas = list(df.columns)
-        preguntas = Pregunta.query.filter_by(encuesta_id=encuesta_id).all()
+        # ============================================
+        # LIMPIAR DATOS: Reemplazar NaN por None
+        # ============================================
+        df = df.where(pd.notnull(df), None)
         
+        # Obtener columnas
+        columnas = list(df.columns)
+        
+        # Obtener preguntas
+        preguntas = Pregunta.query.filter_by(encuesta_id=encuesta_id).all()
         preguntas_data = [{'id': p.id, 'texto': p.texto, 'tipo': p.tipo} for p in preguntas]
         
+        # Convertir a diccionario
+        preview = df.head(5).to_dict('records')
+        
+        # ============================================
+        # LIMPIAR PREVIEW: Reemplazar NaN por string vacío
+        # ============================================
+        preview_limpio = []
+        for row in preview:
+            row_limpio = {}
+            for key, value in row.items():
+                if value is None or (isinstance(value, float) and pd.isna(value)):
+                    row_limpio[key] = ''
+                else:
+                    row_limpio[key] = value
+            preview_limpio.append(row_limpio)
+        
         return jsonify({
+            'success': True,
             'columnas': columnas,
             'preguntas': preguntas_data,
-            'preview': df.head(5).to_dict('records')
+            'preview': preview_limpio
         })
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
@@ -306,7 +339,7 @@ def eliminar_respuestas(encuesta_id):
 
 
 # ============================================
-# RUTA: EXPORTAR RESPUESTAS
+# RUTA: EXPORTAR RESPUESTAS (Todas)
 # ============================================
 
 @respuestas_bp.route('/encuesta/<int:encuesta_id>/respuestas/exportar')
@@ -464,6 +497,9 @@ def cargar_respuestas_ajax(encuesta_id):
         else:
             df = pd.read_excel(archivo)
         
+        # Reemplazar NaN por None
+        df = df.where(pd.notnull(df), None)
+        
         columnas_archivo = list(df.columns)
         
         mapeo = {}
@@ -487,7 +523,7 @@ def cargar_respuestas_ajax(encuesta_id):
                     continue
                 
                 valor = row[columna]
-                if pd.isna(valor) or str(valor).strip() == '':
+                if valor is None or pd.isna(valor) or str(valor).strip() == '':
                     continue
                 
                 valor_str = str(valor).strip()
@@ -535,34 +571,6 @@ def cargar_respuestas_ajax(encuesta_id):
 
 
 # ============================================
-# RUTA: EXPORTAR DATOS CUANTITATIVOS
-# ============================================
-
-@respuestas_bp.route('/encuesta/<int:encuesta_id>/exportar/cuantitativos')
-@login_required
-def exportar_cuantitativos(encuesta_id):
-    """Exporta preguntas cuantitativas con todas las opciones posibles y estadísticas"""
-    encuesta = Encuesta.query.get_or_404(encuesta_id)
-    
-    if encuesta.usuario_id != current_user.id:
-        flash('No tienes permiso para exportar estos datos', 'danger')
-        return redirect(url_for('encuestas.mis_encuestas'))
-    
-    output = exportar_datos_cuantitativos(encuesta_id)
-    
-    if output is None:
-        flash('⚠️ No hay preguntas cuantitativas (cerradas) en esta encuesta', 'warning')
-        return redirect(url_for('respuestas.ver_respuestas', encuesta_id=encuesta_id))
-    
-    return send_file(
-        output,
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        as_attachment=True,
-        download_name=f'datos_cuantitativos_{encuesta.titulo[:30]}_{datetime.now().strftime("%Y%m%d")}.xlsx'
-    )
-
-
-# ============================================
 # RUTA: EXPORTAR DATOS CUALITATIVOS
 # ============================================
 
@@ -570,6 +578,8 @@ def exportar_cuantitativos(encuesta_id):
 @login_required
 def exportar_cualitativos(encuesta_id):
     """Exporta preguntas cualitativas y sus respuestas"""
+    from app.utils.exportar_datos import exportar_datos_cualitativos
+    
     encuesta = Encuesta.query.get_or_404(encuesta_id)
     
     if encuesta.usuario_id != current_user.id:
@@ -587,4 +597,34 @@ def exportar_cualitativos(encuesta_id):
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         as_attachment=True,
         download_name=f'datos_cualitativos_{encuesta.titulo[:30]}_{datetime.now().strftime("%Y%m%d")}.xlsx'
+    )
+
+
+# ============================================
+# RUTA: EXPORTAR DATOS CUANTITATIVOS
+# ============================================
+
+@respuestas_bp.route('/encuesta/<int:encuesta_id>/exportar/cuantitativos')
+@login_required
+def exportar_cuantitativos(encuesta_id):
+    """Exporta preguntas cuantitativas con todas las opciones posibles y estadísticas"""
+    from app.utils.exportar_datos import exportar_datos_cuantitativos
+    
+    encuesta = Encuesta.query.get_or_404(encuesta_id)
+    
+    if encuesta.usuario_id != current_user.id:
+        flash('No tienes permiso para exportar estos datos', 'danger')
+        return redirect(url_for('encuestas.mis_encuestas'))
+    
+    output = exportar_datos_cuantitativos(encuesta_id)
+    
+    if output is None:
+        flash('⚠️ No hay preguntas cuantitativas (cerradas) en esta encuesta', 'warning')
+        return redirect(url_for('respuestas.ver_respuestas', encuesta_id=encuesta_id))
+    
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'datos_cuantitativos_{encuesta.titulo[:30]}_{datetime.now().strftime("%Y%m%d")}.xlsx'
     )
