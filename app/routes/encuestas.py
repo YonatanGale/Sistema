@@ -107,6 +107,74 @@ def procesar_opcion_multiple(valor_str, pregunta_id, encuesta_id, identificador,
     return respuesta
 
 
+def procesar_opcion_unica(valor_str, pregunta, opciones, encuesta_id, identificador):
+    """
+    Procesa respuestas de opción única, con soporte para "Otro".
+    """
+    if not valor_str or not opciones:
+        return None
+    
+    valor_str_limpio = valor_str.strip()
+    valor_lower = valor_str_limpio.lower()
+    
+    # ============================================
+    # 1. VERIFICAR SI ES "OTRO"
+    # ============================================
+    for opcion in opciones:
+        if opcion.es_otro():
+            # Si el valor contiene "otro" (case insensitive)
+            if 'otro' in valor_lower:
+                # Extraer el texto después de "Otro" (si existe)
+                texto_ingresado = ''
+                
+                # Buscar después de "Otro:" o "otro:"
+                if ':' in valor_str_limpio:
+                    partes = valor_str_limpio.split(':', 1)
+                    if len(partes) > 1:
+                        texto_ingresado = partes[1].strip()
+                
+                # Si no hay dos puntos, pero hay texto después de "otro"
+                if not texto_ingresado and valor_lower != 'otro':
+                    # Quitar la palabra "otro" del inicio
+                    temp = valor_str_limpio
+                    for prefijo in ['otro:', 'otro ', 'otro-', 'otro_']:
+                        if temp.lower().startswith(prefijo):
+                            texto_ingresado = temp[len(prefijo):].strip()
+                            break
+                
+                # Si no hay texto adicional, usar "Otro" como texto
+                if not texto_ingresado and valor_lower == 'otro':
+                    texto_ingresado = 'Otro (sin especificar)'
+                elif not texto_ingresado:
+                    texto_ingresado = valor_str_limpio
+                
+                # Crear respuesta con opción "Otro" y texto ingresado
+                respuesta = Respuesta(
+                    encuesta_id=encuesta_id,
+                    pregunta_id=pregunta.id,
+                    opcion_id=opcion.id,
+                    texto_libre=texto_ingresado,
+                    identificador_respuesta=identificador
+                )
+                return respuesta
+    
+    # ============================================
+    # 2. MAPEO NORMAL (por número, letra o texto)
+    # ============================================
+    opcion = mapear_valor_opcion(valor_str_limpio, opciones)
+    
+    if opcion:
+        respuesta = Respuesta(
+            encuesta_id=encuesta_id,
+            pregunta_id=pregunta.id,
+            opcion_id=opcion.id,
+            identificador_respuesta=identificador
+        )
+        return respuesta
+    
+    return None
+
+
 # ============================================
 # RUTAS PRINCIPALES
 # ============================================
@@ -506,7 +574,7 @@ def cargar_respuestas_modal(encuesta_id):
 
 
 # ============================================
-# RUTA AJAX: CARGAR RESPUESTAS (CON SOPORTE PARA OPCIÓN MÚLTIPLE)
+# RUTA AJAX: CARGAR RESPUESTAS (CON SOPORTE PARA "OTRO")
 # ============================================
 
 @encuestas_bp.route('/encuesta/<int:encuesta_id>/cargar-respuestas-ajax', methods=['POST'])
@@ -592,7 +660,6 @@ def cargar_respuestas_ajax(encuesta_id):
                     # VERIFICAR SI ES OPCIÓN MÚLTIPLE
                     # ============================================
                     if pregunta.tipo == 'opcion_multiple':
-                        # Procesar opción múltiple
                         respuesta = procesar_opcion_multiple(valor_str, pregunta.id, encuesta_id, identificador, opciones)
                         if respuesta:
                             db.session.add(respuesta)
@@ -601,19 +668,20 @@ def cargar_respuestas_ajax(encuesta_id):
                         else:
                             errores.append(f"Fila {idx+1}: No se encontraron opciones para '{valor_str}'")
                     else:
-                        # Opción única
-                        opcion = mapear_valor_opcion(valor_str, opciones)
+                        # ============================================
+                        # OPCIÓN ÚNICA (CON SOPORTE PARA "OTRO")
+                        # ============================================
+                        respuesta = procesar_opcion_unica(valor_str, pregunta, opciones, encuesta_id, identificador)
                         
-                        if opcion:
-                            nueva_respuesta = Respuesta(
-                                encuesta_id=encuesta_id,
-                                pregunta_id=pregunta.id,
-                                opcion_id=opcion.id,
-                                identificador_respuesta=identificador
-                            )
-                            db.session.add(nueva_respuesta)
+                        if respuesta:
+                            db.session.add(respuesta)
                             total_guardadas += 1
-                            print(f"  ✅ Opción guardada: '{opcion.texto}' (ID: {opcion.id})")
+                            if respuesta.opcion:
+                                print(f"  ✅ Opción guardada: '{respuesta.opcion.texto}' (ID: {respuesta.opcion.id})")
+                                if respuesta.texto_libre:
+                                    print(f"  📝 Texto adicional: '{respuesta.texto_libre}'")
+                            else:
+                                print(f"  ✅ Respuesta procesada: '{valor_str}'")
                         else:
                             opciones_texto = [o.texto for o in opciones]
                             errores.append(f"Fila {idx+1}: No se encontró la opción '{valor_str}'. Opciones: {opciones_texto}")

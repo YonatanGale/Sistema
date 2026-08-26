@@ -119,11 +119,10 @@ def cargar_respuestas(encuesta_id):
         
         try:
             if archivo.filename.endswith('.csv'):
-                df = pd.read_csv(archivo)
+                df = pd.read_csv(archivo, encoding='utf-8', quotechar='"')
             else:
                 df = pd.read_excel(archivo)
             
-            # Reemplazar NaN por None
             df = df.where(pd.notnull(df), None)
             
             columnas_archivo = list(df.columns)
@@ -218,7 +217,7 @@ def cargar_respuestas(encuesta_id):
 
 
 # ============================================
-# RUTA: PREVISUALIZAR ARCHIVO (CORREGIDA - maneja NaN)
+# RUTA: PREVISUALIZAR ARCHIVO
 # ============================================
 
 @respuestas_bp.route('/encuesta/<int:encuesta_id>/previsualizar', methods=['POST'])
@@ -238,34 +237,23 @@ def previsualizar_archivo(encuesta_id):
         return jsonify({'error': 'No se seleccionó ningún archivo'}), 400
     
     try:
-        import pandas as pd
         import io
         
-        # Leer el archivo correctamente
         if archivo.filename.endswith('.csv'):
             content = archivo.stream.read().decode('utf-8')
-            df = pd.read_csv(io.StringIO(content))
+            df = pd.read_csv(io.StringIO(content), quotechar='"')
         else:
             df = pd.read_excel(archivo)
         
-        # ============================================
-        # LIMPIAR DATOS: Reemplazar NaN por None
-        # ============================================
         df = df.where(pd.notnull(df), None)
-        
-        # Obtener columnas
         columnas = list(df.columns)
+        columnas_limpias = [col.strip('"').strip() for col in columnas]
         
-        # Obtener preguntas
         preguntas = Pregunta.query.filter_by(encuesta_id=encuesta_id).all()
         preguntas_data = [{'id': p.id, 'texto': p.texto, 'tipo': p.tipo} for p in preguntas]
         
-        # Convertir a diccionario
         preview = df.head(5).to_dict('records')
         
-        # ============================================
-        # LIMPIAR PREVIEW: Reemplazar NaN por string vacío
-        # ============================================
         preview_limpio = []
         for row in preview:
             row_limpio = {}
@@ -278,14 +266,12 @@ def previsualizar_archivo(encuesta_id):
         
         return jsonify({
             'success': True,
-            'columnas': columnas,
+            'columnas': columnas_limpias,
             'preguntas': preguntas_data,
             'preview': preview_limpio
         })
         
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
@@ -364,7 +350,10 @@ def exportar_respuestas(encuesta_id):
         if r.identificador_respuesta not in datos_agrupados:
             datos_agrupados[r.identificador_respuesta] = {}
         if r.opcion:
-            datos_agrupados[r.identificador_respuesta][r.pregunta.texto] = r.opcion.texto
+            if r.opcion.es_otro() and r.texto_libre:
+                datos_agrupados[r.identificador_respuesta][r.pregunta.texto] = f"Otro: {r.texto_libre}"
+            else:
+                datos_agrupados[r.identificador_respuesta][r.pregunta.texto] = r.opcion.texto
         else:
             datos_agrupados[r.identificador_respuesta][r.pregunta.texto] = r.texto_libre
     
@@ -493,13 +482,11 @@ def cargar_respuestas_ajax(encuesta_id):
             return jsonify({'success': False, 'message': 'Formato no permitido'}), 400
         
         if archivo.filename.endswith('.csv'):
-            df = pd.read_csv(archivo)
+            df = pd.read_csv(archivo, encoding='utf-8', quotechar='"')
         else:
             df = pd.read_excel(archivo)
         
-        # Reemplazar NaN por None
         df = df.where(pd.notnull(df), None)
-        
         columnas_archivo = list(df.columns)
         
         mapeo = {}
@@ -546,8 +533,7 @@ def cargar_respuestas_ajax(encuesta_id):
                             encuesta_id=encuesta_id,
                             pregunta_id=pregunta.id,
                             opcion_id=opcion.id,
-                            identificador_respuesta=identificador
-                        )
+                            identificador_respuesta=identificador                        )
                         db.session.add(nueva_respuesta)
                         total_guardadas += 1
                     else:

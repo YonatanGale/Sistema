@@ -15,7 +15,6 @@
                 <i class="bi bi-upload"></i> Cargar más
             </a>
             
-            <!-- Menú de exportación -->
             <div class="btn-group">
                 <button type="button" class="btn btn-custom btn-success dropdown-toggle" 
                         data-bs-toggle="dropdown" aria-expanded="false">
@@ -36,7 +35,7 @@
                     <li>
                         <a class="dropdown-item" href="{{ url_for('respuestas.exportar_cualitativos', encuesta_id=encuesta.id) }}">
                             <i class="bi bi-chat-text"></i> Datos cualitativos
-                            <small class="text-muted d-block">Preguntas abiertas (texto libre)</small>
+                            <small class="text-muted d-block">Preguntas abiertas + respuestas "Otro"</small>
                         </a>
                     </li>
                 </ul>
@@ -49,7 +48,6 @@
         </div>
     </div>
 
-    <!-- Mensajes de alerta -->
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             {% for category, message in messages %}
@@ -61,7 +59,6 @@
         {% endif %}
     {% endwith %}
 
-    <!-- Contenido -->
     {% if respuestas_agrupadas %}
         <div class="alert alert-info">
             <i class="bi bi-people"></i> <strong>{{ total_encuestados }}</strong> encuestados respondieron
@@ -95,8 +92,16 @@
                                 {% for r in respuestas_lista if r.pregunta_id == pregunta.id %}
                                     {% set respuesta_encontrada = true %}
                                     {% if r.opcion %}
-                                        <span class="badge bg-info badge-custom">{{ r.opcion.texto }}</span>
-                                    {% else %}
+                                        {# Si la opción es "Otro" y tiene texto libre, mostrarlo como "Otro: texto" #}
+                                        {% if r.opcion.es_otro() and r.texto_libre %}
+                                            <span class="badge bg-warning text-dark" title="Opción 'Otro' con texto personalizado">
+                                                Otro: <strong>{{ r.texto_libre }}</strong>
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-info badge-custom">{{ r.opcion.texto }}</span>
+                                        {% endif %}
+                                    {% elif r.texto_libre %}
+                                        {# Si es texto libre normal #}
                                         <span class="text-truncate d-block" style="max-width: 150px;" title="{{ r.texto_libre }}">{{ r.texto_libre }}</span>
                                     {% endif %}
                                 {% endfor %}
@@ -131,10 +136,6 @@
 </div>
 
 <script>
-// ============================================
-// ELIMINAR RESPUESTAS INDIVIDUALES
-// ============================================
-
 function eliminarRespuesta(identificador, encuestaId) {
     if (confirm('¿Estás seguro de eliminar todas las respuestas del encuestado "' + identificador + '"? Esta acción no se puede deshacer.')) {
         const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || 
@@ -155,15 +156,11 @@ function eliminarRespuesta(identificador, encuestaId) {
         })
         .then(data => {
             if (data.success) {
-                // Eliminar la fila de la tabla
                 const row = document.getElementById('row-' + identificador);
                 if (row) {
                     row.remove();
                 }
-                // Mostrar mensaje
                 mostrarMensaje('✅ Respuestas eliminadas exitosamente', 'success');
-                
-                // Verificar si quedan respuestas
                 const remainingRows = document.querySelectorAll('tbody tr');
                 if (remainingRows.length === 0) {
                     location.reload();
@@ -178,10 +175,6 @@ function eliminarRespuesta(identificador, encuestaId) {
         });
     }
 }
-
-// ============================================
-// ELIMINAR TODAS LAS RESPUESTAS
-// ============================================
 
 function eliminarTodasRespuestas(encuestaId) {
     if (confirm('¿Estás seguro de eliminar TODAS las respuestas de esta encuesta? Esta acción no se puede deshacer.')) {
@@ -215,10 +208,6 @@ function eliminarTodasRespuestas(encuestaId) {
         });
     }
 }
-
-// ============================================
-// MOSTRAR MENSAJES
-// ============================================
 
 function mostrarMensaje(mensaje, tipo = 'info') {
     let container = document.getElementById('mensajes-container');

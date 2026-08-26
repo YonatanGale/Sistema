@@ -52,6 +52,13 @@ class Pregunta(db.Model):
     def tiene_opciones(self):
         return self.tipo in ['opcion_unica', 'opcion_multiple', 'escala_likert', 'seleccion_si_no']
     
+    def tiene_opcion_otro(self):
+        """Verifica si la pregunta tiene una opción 'Otro'"""
+        for opcion in self.opciones:
+            if 'otro' in opcion.texto.lower():
+                return True
+        return False
+    
     def __repr__(self):
         return f'<Pregunta {self.texto[:50]}>'
 
@@ -62,6 +69,10 @@ class Opcion(db.Model):
     texto = db.Column(db.String(200), nullable=False)
     valor = db.Column(db.String(50))
     orden = db.Column(db.Integer, default=0)
+    
+    def es_otro(self):
+        """Verifica si esta opción es 'Otro'"""
+        return 'otro' in self.texto.lower()
     
     def __repr__(self):
         return f'<Opcion {self.texto}>'
@@ -75,8 +86,7 @@ class Respuesta(db.Model):
     texto_libre = db.Column(db.Text, nullable=True)
     fecha_respuesta = db.Column(db.DateTime, default=datetime.utcnow)
     identificador_respuesta = db.Column(db.String(50))
-    # Nuevo campo para opción múltiple: guardar IDs de opciones como string separado por comas
-    opciones_ids = db.Column(db.Text, nullable=True)  # Ej: "1,3,5"
+    opciones_ids = db.Column(db.Text, nullable=True)
     
     opcion = db.relationship('Opcion', backref='respuestas', lazy=True)
     
