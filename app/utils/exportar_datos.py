@@ -12,7 +12,7 @@ def exportar_datos_cualitativos(encuesta_id):
     """
     Exporta las preguntas cualitativas:
     - Texto libre
-    - Texto ingresado en opción "Otro"
+    - Texto ingresado en opción "Otro" (tanto en opción única como múltiple)
     Retorna un objeto BytesIO con el archivo Excel.
     """
     encuesta = Encuesta.query.get_or_404(encuesta_id)
@@ -52,9 +52,20 @@ def exportar_datos_cualitativos(encuesta_id):
         if r.pregunta.tipo == 'texto_libre':
             datos_agrupados[r.identificador_respuesta][r.pregunta.texto] = r.texto_libre or ''
         
-        # Si es "Otro" con texto, guardar el texto personalizado
-        elif r.opcion and r.opcion.es_otro() and r.texto_libre:
-            datos_agrupados[r.identificador_respuesta][r.pregunta.texto] = r.texto_libre
+        # Si es "Otro" con texto (opción única o múltiple)
+        elif r.pregunta.tiene_opcion_otro():
+            # Para opción múltiple, el texto_libre contiene las opciones + "Otro: texto"
+            # Extraer solo el texto después de "Otro:"
+            if r.texto_libre and 'Otro:' in r.texto_libre:
+                import re
+                match = re.search(r'Otro:\s*(.+?)(?=,|$)', r.texto_libre)
+                if match:
+                    texto_otro = match.group(1).strip()
+                    if texto_otro and texto_otro != 'Otro (sin especificar)':
+                        datos_agrupados[r.identificador_respuesta][r.pregunta.texto] = texto_otro
+            # Para opción única, el texto está en texto_libre directamente
+            elif r.opcion and r.opcion.es_otro() and r.texto_libre:
+                datos_agrupados[r.identificador_respuesta][r.pregunta.texto] = r.texto_libre
     
     # Crear DataFrame
     data = []
@@ -69,7 +80,6 @@ def exportar_datos_cualitativos(encuesta_id):
     
     df = pd.DataFrame(data)
     
-    # Si no hay datos, devolver None
     if df.empty:
         return None
     
@@ -77,7 +87,6 @@ def exportar_datos_cualitativos(encuesta_id):
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, sheet_name='Cualitativas', index=False)
         
-        # Agregar metadatos
         total_encuestados = len(datos_agrupados)
         metadata = pd.DataFrame({
             'Encuesta': [encuesta.titulo],
@@ -155,7 +164,7 @@ def exportar_datos_cuantitativos(encuesta_id):
     df_estructura = pd.DataFrame(estructura)
 
     # ============================================
-    # 3. HOJA: RESPUESTAS INDIVIDUALES
+    # 3. HOJA: RESPUESTAS INDIVIDUALES (CUANTITATIVO - SOLO NOMBRES DE OPCIONES)
     # ============================================
     respuestas = Respuesta.query.filter_by(encuesta_id=encuesta_id).all()
     
@@ -164,9 +173,16 @@ def exportar_datos_cuantitativos(encuesta_id):
         if r.identificador_respuesta not in datos_agrupados:
             datos_agrupados[r.identificador_respuesta] = {}
         if r.pregunta.tipo != 'texto_libre':
-            # Para opción múltiple, usar texto_libre que contiene todas las opciones
-            if r.pregunta.tipo == 'opcion_multiple':
-                datos_agrupados[r.identificador_respuesta][r.pregunta.texto] = r.texto_libre or ''
+            # Para opción múltiple, usar opciones_ids para obtener los nombres de las opciones
+            if r.pregunta.tipo == 'opcion_multiple' and r.opciones_ids:
+                # Obtener nombres de opciones desde opciones_ids
+                ids = [int(x) for x in r.opciones_ids.split(',') if x]
+                opciones_texto = []
+                for id_opcion in ids:
+                    opcion = Opcion.query.get(id_opcion)
+                    if opcion:
+                        opciones_texto.append(opcion.texto)
+                datos_agrupados[r.identificador_respuesta][r.pregunta.texto] = ', '.join(opciones_texto)
             elif r.opcion:
                 # CUANTITATIVO: Solo mostrar el nombre de la opción "Otro", no el texto
                 datos_agrupados[r.identificador_respuesta][r.pregunta.texto] = r.opcion.texto
@@ -194,7 +210,7 @@ def exportar_datos_cuantitativos(encuesta_id):
         
         if pregunta.tipo == 'opcion_multiple':
             # ============================================
-            # CONTEO PARA OPCIÓN MÚLTIPLE
+            # CONTEO PARA OPCIÓN MÚLTIPLE (CON "OTRO")
             # ============================================
             conteo = {}
             for opcion in opciones:
@@ -234,7 +250,6 @@ def exportar_datos_cuantitativos(encuesta_id):
             # ============================================
             conteo = {}
             for opcion in opciones:
-                # Contar respuestas que tienen esta opción
                 count = Respuesta.query.filter_by(
                     encuesta_id=encuesta_id,
                     pregunta_id=pregunta.id,
@@ -264,10 +279,8 @@ def exportar_datos_cuantitativos(encuesta_id):
             fila[f'Conteo_{i+1}'] = count
             fila[f'Porcentaje_{i+1}'] = porcentajes.get(opcion_texto, 0)
         
-        # Si la pregunta tiene "Otro", agregar estadísticas adicionales
-        # pero solo el conteo de la opción "Otro", no los textos
+        # Si la pregunta tiene "Otro", agregar el conteo de "Otro"
         if pregunta.tiene_opcion_otro():
-            # Contar cuántos seleccionaron "Otro"
             for opcion in opciones:
                 if opcion.es_otro():
                     fila['Otro'] = conteo.get(opcion.texto, 0)

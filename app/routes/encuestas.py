@@ -71,7 +71,11 @@ def mapear_valor_opcion(valor, opciones):
 def procesar_opcion_multiple(valor_str, pregunta_id, encuesta_id, identificador, opciones):
     """
     Procesa respuestas de opción múltiple.
-    El valor puede ser: "Opcion1, Opcion2, Opcion3" o "1,3,5"
+    Soporta:
+    - "Opcion1, Opcion2, Opcion3"
+    - "1,3,5"
+    - "Opcion1, Otro: texto_ingresado"
+    - "1, Otro: texto_ingresado"
     """
     if not valor_str or not opciones:
         return None
@@ -81,16 +85,51 @@ def procesar_opcion_multiple(valor_str, pregunta_id, encuesta_id, identificador,
     
     opciones_encontradas = []
     opciones_ids = []
-    textos = []
+    textos_opciones = []  # Solo los nombres de las opciones (sin "Otro: texto")
+    texto_otro = None
     
     for v in valores:
-        opcion = mapear_valor_opcion(v, opciones)
-        if opcion:
-            opciones_encontradas.append(opcion)
-            opciones_ids.append(str(opcion.id))
-            textos.append(opcion.texto)
+        v_lower = v.lower()
+        
+        # ============================================
+        # 1. VERIFICAR SI ES "OTRO" CON TEXTO
+        # ============================================
+        if 'otro' in v_lower:
+            # Extraer el texto después de "Otro:"
+            texto_ingresado = ''
+            if ':' in v:
+                partes = v.split(':', 1)
+                if len(partes) > 1:
+                    texto_ingresado = partes[1].strip()
+            
+            # Si no hay dos puntos, pero hay texto después de "otro"
+            if not texto_ingresado and v_lower != 'otro':
+                for prefijo in ['otro:', 'otro ', 'otro-', 'otro_']:
+                    if v_lower.startswith(prefijo):
+                        texto_ingresado = v[len(prefijo):].strip()
+                        break
+            
+            # Buscar la opción "Otro" y guardarla
+            for opcion in opciones:
+                if opcion.es_otro():
+                    opciones_encontradas.append(opcion)
+                    opciones_ids.append(str(opcion.id))
+                    textos_opciones.append(opcion.texto)  # Solo "Otro"
+                    if texto_ingresado:
+                        texto_otro = texto_ingresado
+                    break
+        
+        # ============================================
+        # 2. MAPEO NORMAL (número, letra o texto)
+        # ============================================
         else:
-            print(f"  ⚠️ Opción no encontrada para: '{v}'")
+            opcion = mapear_valor_opcion(v, opciones)
+            if opcion:
+                opciones_encontradas.append(opcion)
+                opciones_ids.append(str(opcion.id))
+                textos_opciones.append(opcion.texto)
+            else:
+                print(f"  ⚠️ Opción no encontrada para: '{v}'")
     
     if not opciones_encontradas:
         return None
@@ -99,10 +138,15 @@ def procesar_opcion_multiple(valor_str, pregunta_id, encuesta_id, identificador,
     respuesta = Respuesta(
         encuesta_id=encuesta_id,
         pregunta_id=pregunta_id,
-        texto_libre=','.join(textos),
+        texto_libre=','.join(textos_opciones),  # Solo nombres de opciones
         opciones_ids=','.join(opciones_ids),
         identificador_respuesta=identificador
     )
+    
+    # Si hay texto de "Otro", guardarlo en texto_libre junto con las opciones
+    # pero reemplazando "Otro" por "Otro: texto" solo para la vista
+    if texto_otro:
+        respuesta.texto_libre = respuesta.texto_libre.replace('Otro', f'Otro: {texto_otro}')
     
     return respuesta
 
@@ -574,7 +618,7 @@ def cargar_respuestas_modal(encuesta_id):
 
 
 # ============================================
-# RUTA AJAX: CARGAR RESPUESTAS (CON SOPORTE PARA "OTRO")
+# RUTA AJAX: CARGAR RESPUESTAS (CON SOPORTE PARA "OTRO" EN OPCIÓN MÚLTIPLE)
 # ============================================
 
 @encuestas_bp.route('/encuesta/<int:encuesta_id>/cargar-respuestas-ajax', methods=['POST'])
