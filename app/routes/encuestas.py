@@ -3,8 +3,108 @@ from flask_login import login_required, current_user
 from app import db
 from app.models import Encuesta, Pregunta, Opcion, Respuesta
 from datetime import datetime
+import pandas as pd
+import unicodedata
 
 encuestas_bp = Blueprint('encuestas', __name__)
+
+
+# ============================================
+# FUNCIONES DE NORMALIZACIÓN Y MAPEO
+# ============================================
+
+def normalizar_texto(texto):
+    """Elimina tildes y convierte a minúsculas para comparación"""
+    if not texto:
+        return ""
+    texto = str(texto).strip().lower()
+    texto = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('ASCII')
+    return texto
+
+
+def mapear_valor_opcion(valor, opciones):
+    """
+    Mapea un valor a una opción existente.
+    - Números: 1, 2, 3, 4, 5 → opción en esa posición
+    - Letras: A, B, C, D, E → opción en esa posición
+    - Texto exacto (con o sin tildes)
+    """
+    if not opciones:
+        return None
+    
+    valor_str = str(valor).strip()
+    
+    # 1. MAPEO POR NÚMERO (1 → 1ª opción)
+    try:
+        if valor_str.isdigit():
+            num = int(valor_str)
+            if 1 <= num <= len(opciones):
+                return opciones[num - 1]
+        elif valor_str.replace('.', '').isdigit():
+            num = int(float(valor_str))
+            if 1 <= num <= len(opciones):
+                return opciones[num - 1]
+    except (ValueError, TypeError):
+        pass
+    
+    # 2. MAPEO POR LETRA (A → 1ª opción)
+    if len(valor_str) == 1 and valor_str.isalpha():
+        letra_index = ord(valor_str.upper()) - ord('A')
+        if 0 <= letra_index < len(opciones):
+            return opciones[letra_index]
+    
+    # 3. COINCIDENCIA EXACTA (sin tildes)
+    valor_normalizado = normalizar_texto(valor_str)
+    for opcion in opciones:
+        if normalizar_texto(opcion.texto) == valor_normalizado:
+            return opcion
+    
+    # 4. COINCIDENCIA PARCIAL
+    for opcion in opciones:
+        opcion_normalizado = normalizar_texto(opcion.texto)
+        if valor_normalizado in opcion_normalizado or opcion_normalizado in valor_normalizado:
+            return opcion
+    
+    return None
+
+
+def procesar_opcion_multiple(valor_str, pregunta_id, encuesta_id, identificador, opciones):
+    """
+    Procesa respuestas de opción múltiple.
+    El valor puede ser: "Opcion1, Opcion2, Opcion3" o "1,3,5"
+    """
+    if not valor_str or not opciones:
+        return None
+    
+    # Dividir por comas
+    valores = [v.strip() for v in valor_str.split(',') if v.strip()]
+    
+    opciones_encontradas = []
+    opciones_ids = []
+    textos = []
+    
+    for v in valores:
+        opcion = mapear_valor_opcion(v, opciones)
+        if opcion:
+            opciones_encontradas.append(opcion)
+            opciones_ids.append(str(opcion.id))
+            textos.append(opcion.texto)
+        else:
+            print(f"  ⚠️ Opción no encontrada para: '{v}'")
+    
+    if not opciones_encontradas:
+        return None
+    
+    # Crear una sola respuesta con todas las opciones
+    respuesta = Respuesta(
+        encuesta_id=encuesta_id,
+        pregunta_id=pregunta_id,
+        texto_libre=','.join(textos),
+        opciones_ids=','.join(opciones_ids),
+        identificador_respuesta=identificador
+    )
+    
+    return respuesta
 
 
 # ============================================
@@ -335,7 +435,6 @@ def tiene_respuestas(encuesta_id):
 @encuestas_bp.route('/buscar-encuestas')
 @login_required
 def buscar_encuestas():
-    """Busca encuestas por título (para autocompletado y filtrado)"""
     termino = request.args.get('q', '').strip()
     limite = request.args.get('limite', 20, type=int)
     pagina = request.args.get('pagina', 1, type=int)
@@ -343,10 +442,8 @@ def buscar_encuestas():
     query = Encuesta.query.filter_by(usuario_id=current_user.id)
     
     if termino:
-        # Búsqueda con LIKE (insensible a mayúsculas)
         query = query.filter(Encuesta.titulo.ilike(f'%{termino}%'))
     
-    # Paginación
     paginacion = query.order_by(Encuesta.fecha_creacion.desc()).paginate(
         page=pagina, per_page=limite, error_out=False
     )
@@ -374,7 +471,6 @@ def buscar_encuestas():
 @encuestas_bp.route('/encuestas-lista-ajax')
 @login_required
 def encuestas_lista_ajax():
-    """Retorna lista de encuestas en JSON para el modal (solo primeras 20)"""
     encuestas = Encuesta.query.filter_by(usuario_id=current_user.id).order_by(Encuesta.fecha_creacion.desc()).limit(20).all()
     
     data = []
@@ -393,7 +489,6 @@ def encuestas_lista_ajax():
 @encuestas_bp.route('/encuesta/<int:encuesta_id>/cargar-respuestas-modal')
 @login_required
 def cargar_respuestas_modal(encuesta_id):
-    """Retorna el HTML del formulario de carga para el modal"""
     encuesta = Encuesta.query.get_or_404(encuesta_id)
     preguntas = Pregunta.query.filter_by(encuesta_id=encuesta_id).order_by(Pregunta.orden).all()
     
@@ -410,10 +505,13 @@ def cargar_respuestas_modal(encuesta_id):
                          identificadores=identificadores)
 
 
+# ============================================
+# RUTA AJAX: CARGAR RESPUESTAS (CON SOPORTE PARA OPCIÓN MÚLTIPLE)
+# ============================================
+
 @encuestas_bp.route('/encuesta/<int:encuesta_id>/cargar-respuestas-ajax', methods=['POST'])
 @login_required
 def cargar_respuestas_ajax(encuesta_id):
-    """Procesa la carga de respuestas via AJAX"""
     try:
         encuesta = Encuesta.query.get_or_404(encuesta_id)
         
@@ -430,21 +528,24 @@ def cargar_respuestas_ajax(encuesta_id):
         
         allowed = {'xlsx', 'xls', 'csv'}
         if not ('.' in archivo.filename and archivo.filename.rsplit('.', 1)[1].lower() in allowed):
-            return jsonify({'success': False, 'message': 'Formato no permitido. Use .xlsx, .xls o .csv'}), 400
+            return jsonify({'success': False, 'message': 'Formato no permitido'}), 400
         
-        import pandas as pd
+        # Leer archivo
         if archivo.filename.endswith('.csv'):
-            df = pd.read_csv(archivo)
+            df = pd.read_csv(archivo, encoding='utf-8', quotechar='"')
         else:
             df = pd.read_excel(archivo)
         
+        df = df.where(pd.notnull(df), None)
         columnas_archivo = list(df.columns)
         
+        # Obtener mapeo del formulario
         mapeo = {}
         for columna in columnas_archivo:
             pregunta_id = request.form.get(f'mapping_{columna}')
             if pregunta_id:
                 mapeo[columna] = int(pregunta_id)
+                print(f"🔗 Columna '{columna}' → Pregunta ID {pregunta_id}")
         
         if not mapeo:
             return jsonify({'success': False, 'message': 'Debes mapear al menos una columna a una pregunta'}), 400
@@ -454,18 +555,25 @@ def cargar_respuestas_ajax(encuesta_id):
         
         for idx, row in df.iterrows():
             identificador = f"R{idx+1:04d}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            print(f"\n📝 Procesando fila {idx+1}: {identificador}")
             
             for columna, pregunta_id in mapeo.items():
                 pregunta = Pregunta.query.get(pregunta_id)
                 if not pregunta:
+                    print(f"  ❌ Pregunta ID {pregunta_id} no encontrada")
                     continue
                 
                 valor = row[columna]
-                if pd.isna(valor) or str(valor).strip() == '':
+                if valor is None or pd.isna(valor) or str(valor).strip() == '':
+                    print(f"  ⏭️ Columna '{columna}': valor vacío")
                     continue
                 
                 valor_str = str(valor).strip()
+                print(f"  🔍 Columna '{columna}' → '{valor_str}'")
                 
+                # ============================================
+                # GUARDAR SEGÚN TIPO DE PREGUNTA
+                # ============================================
                 if pregunta.tipo == 'texto_libre':
                     nueva_respuesta = Respuesta(
                         encuesta_id=encuesta_id,
@@ -475,32 +583,45 @@ def cargar_respuestas_ajax(encuesta_id):
                     )
                     db.session.add(nueva_respuesta)
                     total_guardadas += 1
+                    print(f"  ✅ Texto libre guardado: '{valor_str}'")
                 else:
-                    opcion = Opcion.query.filter_by(
-                        pregunta_id=pregunta.id,
-                        texto=valor_str
-                    ).first()
+                    opciones = Opcion.query.filter_by(pregunta_id=pregunta.id).order_by(Opcion.orden).all()
+                    print(f"  📋 Opciones disponibles: {[o.texto for o in opciones]}")
                     
-                    if not opcion:
-                        opciones = Opcion.query.filter_by(pregunta_id=pregunta.id).all()
-                        for o in opciones:
-                            if valor_str.strip().lower() in o.texto.strip().lower() or o.texto.strip().lower() in valor_str.strip().lower():
-                                opcion = o
-                                break
-                    
-                    if opcion:
-                        nueva_respuesta = Respuesta(
-                            encuesta_id=encuesta_id,
-                            pregunta_id=pregunta.id,
-                            opcion_id=opcion.id,
-                            identificador_respuesta=identificador
-                        )
-                        db.session.add(nueva_respuesta)
-                        total_guardadas += 1
+                    # ============================================
+                    # VERIFICAR SI ES OPCIÓN MÚLTIPLE
+                    # ============================================
+                    if pregunta.tipo == 'opcion_multiple':
+                        # Procesar opción múltiple
+                        respuesta = procesar_opcion_multiple(valor_str, pregunta.id, encuesta_id, identificador, opciones)
+                        if respuesta:
+                            db.session.add(respuesta)
+                            total_guardadas += 1
+                            print(f"  ✅ Opción múltiple guardada: '{valor_str}'")
+                        else:
+                            errores.append(f"Fila {idx+1}: No se encontraron opciones para '{valor_str}'")
                     else:
-                        errores.append(f"Fila {idx+1}: No se encontró la opción '{valor_str}'")
+                        # Opción única
+                        opcion = mapear_valor_opcion(valor_str, opciones)
+                        
+                        if opcion:
+                            nueva_respuesta = Respuesta(
+                                encuesta_id=encuesta_id,
+                                pregunta_id=pregunta.id,
+                                opcion_id=opcion.id,
+                                identificador_respuesta=identificador
+                            )
+                            db.session.add(nueva_respuesta)
+                            total_guardadas += 1
+                            print(f"  ✅ Opción guardada: '{opcion.texto}' (ID: {opcion.id})")
+                        else:
+                            opciones_texto = [o.texto for o in opciones]
+                            errores.append(f"Fila {idx+1}: No se encontró la opción '{valor_str}'. Opciones: {opciones_texto}")
+                            print(f"  ❌ ERROR: No se encontró '{valor_str}'")
         
         db.session.commit()
+        
+        print(f"\n✅ Total guardadas: {total_guardadas}")
         
         mensaje = f'✅ {total_guardadas} respuestas cargadas exitosamente'
         if errores:
@@ -514,6 +635,8 @@ def cargar_respuestas_ajax(encuesta_id):
         })
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'message': str(e)}), 500
 
 

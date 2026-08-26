@@ -75,6 +75,8 @@ class Respuesta(db.Model):
     texto_libre = db.Column(db.Text, nullable=True)
     fecha_respuesta = db.Column(db.DateTime, default=datetime.utcnow)
     identificador_respuesta = db.Column(db.String(50))
+    # Nuevo campo para opción múltiple: guardar IDs de opciones como string separado por comas
+    opciones_ids = db.Column(db.Text, nullable=True)  # Ej: "1,3,5"
     
     opcion = db.relationship('Opcion', backref='respuestas', lazy=True)
     
