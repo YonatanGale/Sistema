@@ -26,15 +26,44 @@ def mapear_valor_opcion(valor, opciones):
     """
     Mapea un valor a una opción existente.
     - Números: 1, 2, 3, 4, 5 → opción en esa posición
+    - 0 → "No" (para preguntas Sí/No)
+    - 1 → "Sí" (para preguntas Sí/No)
     - Letras: A, B, C, D, E → opción en esa posición
     - Texto exacto (con o sin tildes)
+    - true/false → Sí/No
     """
     if not opciones:
         return None
     
     valor_str = str(valor).strip()
     
+    # ============================================
+    # 0. MAPEO ESPECIAL PARA SÍ/NO (0 → No, 1 → Sí)
+    # ============================================
+    if len(opciones) == 2:
+        opciones_texto = [normalizar_texto(o.texto) for o in opciones]
+        if 'si' in opciones_texto and 'no' in opciones_texto:
+            # Mapear 0 → No, 1 → Sí
+            if valor_str == '0':
+                for opcion in opciones:
+                    if normalizar_texto(opcion.texto) == 'no':
+                        return opcion
+            elif valor_str == '1':
+                for opcion in opciones:
+                    if normalizar_texto(opcion.texto) == 'si':
+                        return opcion
+            elif valor_str.lower() in ['true', 'verdadero']:
+                for opcion in opciones:
+                    if normalizar_texto(opcion.texto) == 'si':
+                        return opcion
+            elif valor_str.lower() in ['false', 'falso']:
+                for opcion in opciones:
+                    if normalizar_texto(opcion.texto) == 'no':
+                        return opcion
+    
+    # ============================================
     # 1. MAPEO POR NÚMERO (1 → 1ª opción)
+    # ============================================
     try:
         if valor_str.isdigit():
             num = int(valor_str)
@@ -47,19 +76,25 @@ def mapear_valor_opcion(valor, opciones):
     except (ValueError, TypeError):
         pass
     
+    # ============================================
     # 2. MAPEO POR LETRA (A → 1ª opción)
+    # ============================================
     if len(valor_str) == 1 and valor_str.isalpha():
         letra_index = ord(valor_str.upper()) - ord('A')
         if 0 <= letra_index < len(opciones):
             return opciones[letra_index]
     
+    # ============================================
     # 3. COINCIDENCIA EXACTA (sin tildes)
+    # ============================================
     valor_normalizado = normalizar_texto(valor_str)
     for opcion in opciones:
         if normalizar_texto(opcion.texto) == valor_normalizado:
             return opcion
     
+    # ============================================
     # 4. COINCIDENCIA PARCIAL
+    # ============================================
     for opcion in opciones:
         opcion_normalizado = normalizar_texto(opcion.texto)
         if valor_normalizado in opcion_normalizado or opcion_normalizado in valor_normalizado:

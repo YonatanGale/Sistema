@@ -40,16 +40,42 @@ def normalizar_texto(texto):
 def mapear_valor_opcion(valor, opciones):
     """
     Mapea un valor a una opción existente.
-    Soporte:
+    - Números: 1, 2, 3, 4, 5 → opción en esa posición
+    - 0 → "No" (para preguntas Sí/No)
+    - 1 → "Sí" (para preguntas Sí/No)
+    - Letras: A, B, C, D, E → opción en esa posición
     - Texto exacto (con o sin tildes)
-    - Códigos: A, B, C, D, E
-    - Números: 1, 2, 3, 4, 5
+    - true/false → Sí/No
     """
     if not opciones:
         return None
     
     valor_str = str(valor).strip()
     valor_normalizado = normalizar_texto(valor_str)
+    
+    # ============================================
+    # 0. MAPEO ESPECIAL PARA SÍ/NO (0 → No, 1 → Sí)
+    # ============================================
+    if len(opciones) == 2:
+        opciones_texto = [normalizar_texto(o.texto) for o in opciones]
+        if 'si' in opciones_texto and 'no' in opciones_texto:
+            # Mapear 0 → No, 1 → Sí
+            if valor_str == '0':
+                for opcion in opciones:
+                    if normalizar_texto(opcion.texto) == 'no':
+                        return opcion
+            elif valor_str == '1':
+                for opcion in opciones:
+                    if normalizar_texto(opcion.texto) == 'si':
+                        return opcion
+            elif valor_str.lower() in ['true', 'verdadero']:
+                for opcion in opciones:
+                    if normalizar_texto(opcion.texto) == 'si':
+                        return opcion
+            elif valor_str.lower() in ['false', 'falso']:
+                for opcion in opciones:
+                    if normalizar_texto(opcion.texto) == 'no':
+                        return opcion
     
     # 1. Coincidencia exacta (case insensitive)
     for opcion in opciones:
@@ -533,7 +559,8 @@ def cargar_respuestas_ajax(encuesta_id):
                             encuesta_id=encuesta_id,
                             pregunta_id=pregunta.id,
                             opcion_id=opcion.id,
-                            identificador_respuesta=identificador                        )
+                            identificador_respuesta=identificador
+                        )
                         db.session.add(nueva_respuesta)
                         total_guardadas += 1
                     else:
