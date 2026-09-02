@@ -1,0 +1,27 @@
+# motor_cualitativo/requirements.txt
+# ============================================
+# DEPENDENCIAS DEL MOTOR DE ANÁLISIS CUALITATIVO
+# ============================================
+
+# Transformers y Deep Learning
+torch
+transformers
+sentencepiece
+tokenizers
+
+# Procesamiento de texto
+nltk
+scikit-learn
+pandas
+numpy
+
+# Visualización
+matplotlib
+seaborn
+wordcloud
+plotly
+
+# Utilidades
+tqdm
+openpyxl
+xlrd
