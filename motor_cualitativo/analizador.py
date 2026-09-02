@@ -56,6 +56,10 @@ class AnalizadorCualitativo:
     def _descargar_recursos_nltk(self):
         """Descarga recursos de NLTK necesarios"""
         try:
+            nltk.data.find('tokenizers/punkt_tab')
+        except LookupError:
+            nltk.download('punkt_tab', quiet=True)
+        try:
             nltk.data.find('tokenizers/punkt')
         except LookupError:
             nltk.download('punkt', quiet=True)
@@ -146,6 +150,21 @@ class AnalizadorCualitativo:
         elif isinstance(textos, str):
             textos = [textos]
         
+        # ============================================
+        # FILTRAR VALORES NULOS Y CONVERTIR A STRING
+        # ============================================
+        textos_limpios = []
+        for t in textos:
+            if t is not None and pd.notna(t):
+                t_str = str(t).strip()
+                if t_str != '':
+                    textos_limpios.append(t_str)
+        
+        textos = textos_limpios
+        
+        if not textos:
+            return pd.DataFrame({'texto': [], 'sentimiento': [], 'score': []})
+        
         resultados = []
         
         if self.classifier:
@@ -188,10 +207,19 @@ class AnalizadorCualitativo:
         """Análisis de sentimiento simple con NLTK"""
         resultados = []
         for texto in textos:
-            palabras_positivas = ['bueno', 'excelente', 'genial', 'maravilloso', 'fantástico', 'mejor']
-            palabras_negativas = ['malo', 'pésimo', 'terrible', 'horrible', 'peor', 'problema']
-            
+            # Asegurarse de que sea string
+            texto = str(texto) if texto is not None else ""
+            if not texto.strip():
+                resultados.append({
+                    'label': 'NEUTRAL',
+                    'score': 0.5
+                })
+                continue
+                
             texto_lower = texto.lower()
+            palabras_positivas = ['bueno', 'excelente', 'genial', 'maravilloso', 'fantástico', 'mejor', 'gracias', 'encanta', 'satisfecho', 'feliz']
+            palabras_negativas = ['malo', 'pésimo', 'terrible', 'horrible', 'peor', 'problema', 'queja', 'deficiente', 'negativo']
+            
             pos_count = sum(1 for p in palabras_positivas if p in texto_lower)
             neg_count = sum(1 for n in palabras_negativas if n in texto_lower)
             
@@ -234,24 +262,67 @@ class AnalizadorCualitativo:
             else:
                 textos = textos.iloc[:, 0].tolist()
         
+        # ============================================
+        # FILTRAR Y CONVERTIR A STRING
+        # ============================================
+        textos_limpios = []
+        for t in textos:
+            if t is not None and pd.notna(t):
+                t_str = str(t).strip()
+                if t_str != '':
+                    textos_limpios.append(t_str)
+        
+        textos = textos_limpios
+        
+        if not textos:
+            return pd.DataFrame({'palabra': [], 'tfidf_score': [], 'frecuencia': []})
+        
         textos_procesados = self._preprocesar_textos(textos)
         
         stopwords_es = self._obtener_stopwords_espanol()
+        
+        # Ajustar parámetros para datasets pequeños
+        n_docs = len(textos_procesados)
+        
+        if n_docs < 5:
+            min_df = 1
+        else:
+            min_df = 2
+        
+        max_features = min(max_features, 100)
         
         self.tfidf_vectorizer = TfidfVectorizer(
             max_features=max_features,
             stop_words=list(stopwords_es),
             ngram_range=(1, 2),
-            max_df=0.85,
-            min_df=2
+            max_df=0.9,
+            min_df=min_df
         )
         
-        tfidf_matrix = self.tfidf_vectorizer.fit_transform(textos_procesados)
+        try:
+            tfidf_matrix = self.tfidf_vectorizer.fit_transform(textos_procesados)
+        except ValueError as e:
+            logger.warning(f"TF-IDF falló con parámetros ajustados: {e}")
+            logger.info("Intentando con min_df=1 y max_df=1.0...")
+            
+            self.tfidf_vectorizer = TfidfVectorizer(
+                max_features=50,
+                stop_words=list(stopwords_es),
+                ngram_range=(1, 1),
+                max_df=1.0,
+                min_df=1
+            )
+            tfidf_matrix = self.tfidf_vectorizer.fit_transform(textos_procesados)
         
         feature_names = self.tfidf_vectorizer.get_feature_names_out()
         tfidf_scores = tfidf_matrix.toarray()
         promedio_scores = tfidf_scores.mean(axis=0)
         
+        if len(feature_names) == 0 or len(promedio_scores) == 0:
+            return pd.DataFrame({'palabra': [], 'tfidf_score': [], 'frecuencia': []})
+        
+        # Ajustar n_top al número real de características
+        n_top = min(n_top, len(feature_names))
         indices = np.argsort(promedio_scores)[::-1][:n_top]
         
         palabras_clave = []
@@ -264,14 +335,22 @@ class AnalizadorCualitativo:
         
         df_keywords = pd.DataFrame(palabras_clave)
         
-        palabras_por_documento = []
-        for i, doc in enumerate(textos):
-            doc_scores = tfidf_scores[i]
-            doc_indices = np.argsort(doc_scores)[::-1][:5]
-            palabras = [feature_names[idx] for idx in doc_indices if doc_scores[idx] > 0]
-            palabras_por_documento.append(palabras)
-        
-        df_keywords['documentos_asociados'] = palabras_por_documento[:n_top]
+        # ============================================
+        # CORREGIR: Asegurar que la longitud coincida
+        # ============================================
+        if len(df_keywords) > 0:
+            palabras_por_documento = []
+            for i, doc in enumerate(textos):
+                doc_scores = tfidf_scores[i] if i < len(tfidf_scores) else []
+                if len(doc_scores) > 0:
+                    doc_indices = np.argsort(doc_scores)[::-1][:3]
+                    palabras = [feature_names[idx] for idx in doc_indices if doc_scores[idx] > 0]
+                else:
+                    palabras = []
+                palabras_por_documento.append(palabras)
+            
+            # Tomar solo los primeros len(df_keywords) documentos
+            df_keywords['documentos_asociados'] = palabras_por_documento[:len(df_keywords)]
         
         return df_keywords
     
@@ -308,18 +387,41 @@ class AnalizadorCualitativo:
             else:
                 textos = textos.iloc[:, 0].tolist()
         
+        # ============================================
+        # FILTRAR Y CONVERTIR A STRING
+        # ============================================
+        textos_limpios = []
+        for t in textos:
+            if t is not None and pd.notna(t):
+                t_str = str(t).strip()
+                if t_str != '':
+                    textos_limpios.append(t_str)
+        
+        textos = textos_limpios
+        
+        if not textos or len(textos) < 3:
+            return {
+                'temas': [{'tema_id': i+1, 'nombre': f'Tema {i+1}', 'palabras_clave': [], 'pesos': []} for i in range(n_temas)],
+                'asignaciones': pd.DataFrame({'documento': [], 'tema_id': [], 'confianza': [], 'tema_nombre': []}),
+                'distribucion_temas': pd.DataFrame()
+            }
+        
         textos_procesados = self._preprocesar_textos(textos)
         
         stopwords_es = self._obtener_stopwords_espanol()
         vectorizer = TfidfVectorizer(
             max_features=max_features,
             stop_words=list(stopwords_es),
-            max_df=0.85,
-            min_df=2
+            max_df=0.9,
+            min_df=1
         )
         
         tfidf_matrix = vectorizer.fit_transform(textos_procesados)
         feature_names = vectorizer.get_feature_names_out()
+        
+        # Ajustar número de temas al número de documentos
+        n_temas = min(n_temas, len(textos))
+        n_temas = max(n_temas, 2)
         
         self.lda_model = LatentDirichletAllocation(
             n_components=n_temas,
@@ -333,8 +435,8 @@ class AnalizadorCualitativo:
         temas = []
         for topic_idx, topic in enumerate(self.lda_model.components_):
             top_indices = topic.argsort()[-n_top_words:][::-1]
-            top_words = [feature_names[i] for i in top_indices]
-            top_scores = [topic[i] for i in top_indices]
+            top_words = [feature_names[i] for i in top_indices if i < len(feature_names)]
+            top_scores = [topic[i] for i in top_indices if i < len(feature_names)]
             
             temas.append({
                 'tema_id': topic_idx + 1,
@@ -383,24 +485,60 @@ class AnalizadorCualitativo:
             else:
                 textos = textos.iloc[:, 0].tolist()
         
+        # ============================================
+        # FILTRAR Y CONVERTIR A STRING
+        # ============================================
+        textos_limpios = []
+        for t in textos:
+            if t is not None and pd.notna(t):
+                t_str = str(t).strip()
+                if t_str != '':
+                    textos_limpios.append(t_str)
+        
+        textos = textos_limpios
+        
+        if not textos:
+            return {
+                'resultados': pd.DataFrame({'texto': [], 'sentimiento': [], 'score_confianza': [], 'tema': [], 'confianza_tema': []}),
+                'sentimiento': pd.DataFrame({'texto': [], 'sentimiento': [], 'score': []}),
+                'palabras_clave': pd.DataFrame({'palabra': [], 'tfidf_score': [], 'frecuencia': []}),
+                'temas': {'temas': [], 'asignaciones': pd.DataFrame(), 'distribucion_temas': pd.DataFrame()},
+                'resumen': {'total_textos': 0, 'sentimiento_predominante': 'N/A', 'distribucion_sentimiento': {}, 'distribucion_temas': {}}
+            }
+        
         df_textos = pd.DataFrame({'texto': textos})
         
         logger.info("Analizando sentimiento...")
         df_sentimiento = self.analizar_sentimiento(df_textos)
         
         logger.info("Extrayendo palabras clave...")
-        df_keywords = self.extraer_palabras_clave(df_textos, n_top=n_keywords)
+        try:
+            df_keywords = self.extraer_palabras_clave(df_textos, n_top=n_keywords)
+        except Exception as e:
+            logger.warning(f"Error en extracción de keywords: {e}")
+            df_keywords = pd.DataFrame({'palabra': [], 'tfidf_score': [], 'frecuencia': []})
         
         logger.info("Clasificando temas...")
-        temas_resultados = self.clasificar_temas(df_textos, n_temas=n_temas)
+        try:
+            temas_resultados = self.clasificar_temas(df_textos, n_temas=n_temas)
+        except Exception as e:
+            logger.warning(f"Error en clasificación de temas: {e}")
+            temas_resultados = {
+                'temas': [],
+                'asignaciones': pd.DataFrame({'documento': [], 'tema_id': [], 'confianza': [], 'tema_nombre': []}),
+                'distribucion_temas': pd.DataFrame()
+            }
         
         df_resultados = df_textos.copy()
         df_resultados['sentimiento'] = df_sentimiento['sentimiento'] if 'sentimiento' in df_sentimiento.columns else 'Neutral'
         df_resultados['score_confianza'] = df_sentimiento['score'] if 'score' in df_sentimiento.columns else 0.5
         
-        if 'asignaciones' in temas_resultados:
+        if 'asignaciones' in temas_resultados and not temas_resultados['asignaciones'].empty:
             df_resultados['tema'] = temas_resultados['asignaciones']['tema_nombre']
             df_resultados['confianza_tema'] = temas_resultados['asignaciones']['confianza']
+        else:
+            df_resultados['tema'] = 'Sin tema'
+            df_resultados['confianza_tema'] = 0.0
         
         return {
             'resultados': df_resultados,
@@ -416,11 +554,19 @@ class AnalizadorCualitativo:
         
         if 'sentimiento' in df_resultados.columns:
             resumen['distribucion_sentimiento'] = df_resultados['sentimiento'].value_counts().to_dict()
+        else:
+            resumen['distribucion_sentimiento'] = {}
         
         if 'tema' in df_resultados.columns:
             resumen['distribucion_temas'] = df_resultados['tema'].value_counts().to_dict()
+        else:
+            resumen['distribucion_temas'] = {}
         
         resumen['total_textos'] = len(df_resultados)
-        resumen['sentimiento_predominante'] = df_resultados['sentimiento'].mode()[0] if 'sentimiento' in df_resultados.columns else 'N/A'
+        
+        if 'sentimiento' in df_resultados.columns and not df_resultados.empty:
+            resumen['sentimiento_predominante'] = df_resultados['sentimiento'].mode()[0]
+        else:
+            resumen['sentimiento_predominante'] = 'N/A'
         
         return resumen
