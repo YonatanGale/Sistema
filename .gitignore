@@ -1,10 +1,192 @@
+# ============================================
+# PYTHON
+# ============================================
 venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+*.pyzw
+*.egg
+*.egg-info/
+dist/
+build/
+*.so
+*.dll
+*.dylib
+
+# ============================================
+# BASE DE DATOS
+# ============================================
 instance/
 *.db
-.env
-.DS_Store
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# ============================================
+# ARCHIVOS DE DATOS
+# ============================================
 *.xlsx
 *.xls
 *.csv
+*.tsv
+*.json
+*.jsonl
+*.parquet
+*.feather
+*.arrow
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.joblib
+
+# ============================================
+# MODELOS DE MACHINE LEARNING (¡IMPORTANTE!)
+# ============================================
+*.bin
+*.safetensors
+*.pb
+*.h5
+*.model
+*.weights
+*.hdf5
+*.ckpt
+*.pt
+*.pth
+*.onnx
+*.tflite
+*.mar
+*.mlmodel
+*.mnn
+*.ncnn
+*.param
+*.caffemodel
+*.prototxt
+
+# Modelos descargados de Hugging Face
+motor_cualitativo/data/modelos/
+motor_cualitativo/data/resultados/
+motor_cualitativo/data/pruebas/
+.cache/
+~/.cache/huggingface/
+
+# ============================================
+# VARIABLES DE ENTORNO Y CONFIGURACIÓN
+# ============================================
+.env
+.env.local
+.env.production
+.env.development
+.env.test
+.flaskenv
+config.py
+config.local.py
+settings_local.py
+secrets.json
+secrets.yaml
+
+# ============================================
+# IDE Y EDITORES
+# ============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.suo
+*.user
+*.sln.docstates
+*.code-workspace
+*.iml
+*.ipr
+*.iws
+.workspace
+.classpath
+.project
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# ============================================
+# NAVEGADOR Y HERRAMIENTAS
+# ============================================
+.ssh/
+.npm/
+.yarn/
+node_modules/
+.cache/
+tmp/
+temp/
+logs/
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# ============================================
+# JUPYTER NOTEBOOKS
+# ============================================
+.ipynb_checkpoints/
+*.ipynb
+*_checkpoint/
+*.nbconvert.ipynb
+
+# ============================================
+# ARCHIVOS DE PRUEBA Y TEMPORALES
+# ============================================
+tests/__pycache__/
+tests/*.log
+*.tmp
+*.temp
+*.bak
+*.backup
+*.swp
+
+# ============================================
+# PROYECTO ESPECÍFICO
+# ============================================
+# Archivos de resultados de análisis
+motor_cualitativo/data/resultados/*.xlsx
+motor_cualitativo/data/resultados/*.csv
+motor_cualitativo/data/resultados/*.json
+
+# Archivos de prueba grandes
+*.zip
+*.tar.gz
+*.rar
+*.7z
+*.iso
+*.dmg
+
+# ============================================
+# GIT
+# ============================================
+.git/
+.gitattributes
+.gitmodules
+.gitignore
+*.orig
+
+# ============================================
+# SISTEMA OPERATIVO
+# ============================================
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
