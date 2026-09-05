@@ -56,10 +56,6 @@ class AnalizadorCualitativo:
     def _descargar_recursos_nltk(self):
         """Descarga recursos de NLTK necesarios"""
         try:
-            nltk.data.find('tokenizers/punkt_tab')
-        except LookupError:
-            nltk.download('punkt_tab', quiet=True)
-        try:
             nltk.data.find('tokenizers/punkt')
         except LookupError:
             nltk.download('punkt', quiet=True)
@@ -289,7 +285,8 @@ class AnalizadorCualitativo:
         else:
             min_df = 2
         
-        max_features = min(max_features, 100)
+        # Limitar max_features para datasets pequeños
+        max_features = min(max_features, max(50, n_docs * 5))
         
         self.tfidf_vectorizer = TfidfVectorizer(
             max_features=max_features,
@@ -321,8 +318,14 @@ class AnalizadorCualitativo:
         if len(feature_names) == 0 or len(promedio_scores) == 0:
             return pd.DataFrame({'palabra': [], 'tfidf_score': [], 'frecuencia': []})
         
-        # Ajustar n_top al número real de características
+        # ============================================
+        # CORREGIDO: Ajustar n_top al número real de características
+        # ============================================
         n_top = min(n_top, len(feature_names))
+        
+        if n_top == 0:
+            return pd.DataFrame({'palabra': [], 'tfidf_score': [], 'frecuencia': []})
+        
         indices = np.argsort(promedio_scores)[::-1][:n_top]
         
         palabras_clave = []
@@ -336,7 +339,7 @@ class AnalizadorCualitativo:
         df_keywords = pd.DataFrame(palabras_clave)
         
         # ============================================
-        # CORREGIR: Asegurar que la longitud coincida
+        # CORREGIDO: Asegurar que la longitud coincida
         # ============================================
         if len(df_keywords) > 0:
             palabras_por_documento = []
@@ -349,8 +352,14 @@ class AnalizadorCualitativo:
                     palabras = []
                 palabras_por_documento.append(palabras)
             
-            # Tomar solo los primeros len(df_keywords) documentos
-            df_keywords['documentos_asociados'] = palabras_por_documento[:len(df_keywords)]
+            # ============================================
+            # CORREGIDO: Asegurar que la longitud coincida exactamente
+            # ============================================
+            documentos_asociados = palabras_por_documento[:len(df_keywords)]
+            # Si hay menos documentos, rellenar con listas vacías
+            while len(documentos_asociados) < len(df_keywords):
+                documentos_asociados.append([])
+            df_keywords['documentos_asociados'] = documentos_asociados
         
         return df_keywords
     
@@ -514,6 +523,11 @@ class AnalizadorCualitativo:
         logger.info("Extrayendo palabras clave...")
         try:
             df_keywords = self.extraer_palabras_clave(df_textos, n_top=n_keywords)
+            # ============================================
+            # CORREGIDO: Si no hay palabras clave, devolver DataFrame vacío
+            # ============================================
+            if df_keywords is None or df_keywords.empty:
+                df_keywords = pd.DataFrame({'palabra': [], 'tfidf_score': [], 'frecuencia': []})
         except Exception as e:
             logger.warning(f"Error en extracción de keywords: {e}")
             df_keywords = pd.DataFrame({'palabra': [], 'tfidf_score': [], 'frecuencia': []})

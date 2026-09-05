@@ -72,15 +72,12 @@ class ProcesadorTexto:
             return []
         
         try:
-            # Intentar con word_tokenize de NLTK
             tokens = word_tokenize(texto_limpio, language='spanish')
         except LookupError:
-            # Fallback si falta el tokenizador
             from nltk.tokenize import wordpunct_tokenize
             logger.warning("Usando wordpunct_tokenize como fallback")
             tokens = wordpunct_tokenize(texto_limpio)
         except Exception as e:
-            # Fallback alternativo con split simple
             logger.warning(f"Error en tokenización: {e}. Usando split simple.")
             tokens = texto_limpio.split()
         
