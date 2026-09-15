@@ -190,3 +190,29 @@ motor_cualitativo/data/resultados/*.json
 ehthumbs.db
 Thumbs.db
 Desktop.ini
+
+# ============================================
+# EXPORTS (CSV generados por el sistema)
+# ============================================
+# Ignorar archivos generados en carpetas exports
+**/exports/*.csv
+**/exports/*.xlsx
+**/exports/*.xls
+
+# Mantener la estructura de carpetas con .gitkeep
+!**/exports/.gitkeep
+!**/exports/.gitkeep
+
+# ============================================
+# ARCHIVOS TEMPORALES DE EXPORTACIÓN
+# ============================================
+*.tmp.csv
+*.tmp.xlsx
+temp_export_*
+
+# ============================================
+# RESULTADOS DEL MOTOR
+# ============================================
+motor_cualitativo/data/resultados/*.xlsx
+motor_cualitativo/data/resultados/*.csv
+!motor_cualitativo/data/resultados/.gitkeep

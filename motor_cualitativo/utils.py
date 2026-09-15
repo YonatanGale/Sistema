@@ -173,3 +173,69 @@ def cargar_desde_csv(ruta_archivo, columna_texto=None, encoding='utf-8-sig'):
         df.columns = ['texto']
     
     return df
+
+# ============================================
+# FUNCIONES PARA TRABAJAR CON CSV DEL SISTEMA
+# ============================================
+
+def cargar_desde_csv_encuestas(ruta_csv, usar_texto_analisis=True):
+    """
+    Carga un CSV generado por el sistema de encuestas.
+    
+    Args:
+        ruta_csv: Ruta al CSV
+        usar_texto_analisis: Si True, usa la columna 'texto_analisis'
+        
+    Returns:
+        DataFrame listo para el motor
+    """
+    from .lector_csv import leer_csv_encuestas
+    return leer_csv_encuestas(ruta_csv, usar_texto_analisis=usar_texto_analisis)
+
+
+def procesar_csv_completo(ruta_csv, directorio_resultados='data/resultados',
+                          n_temas=3, n_keywords=15):
+    """
+    Procesa un CSV del sistema de encuestas completamente.
+    Lee → Analiza → Guarda Excel.
+    
+    Args:
+        ruta_csv: Ruta al CSV
+        directorio_resultados: Dónde guardar los resultados
+        n_temas: Número de temas
+        n_keywords: Número de palabras clave
+        
+    Returns:
+        dict con los resultados del análisis
+    """
+    from .lector_csv import leer_csv_encuestas
+    from .analizador import AnalizadorCualitativo
+    
+    # 1. Leer el CSV
+    df = leer_csv_encuestas(ruta_csv)
+    
+    if df.empty:
+        return {
+            'success': False,
+            'mensaje': 'No hay datos válidos en el CSV'
+        }
+    
+    # 2. Analizar
+    analizador = AnalizadorCualitativo()
+    resultados = analizador.analizar_completo(df, n_temas=n_temas, n_keywords=n_keywords)
+    
+    # 3. Guardar Excel
+    nombre_base = os.path.splitext(os.path.basename(ruta_csv))[0]
+    ruta_excel = guardar_resultados(
+        resultados,
+        nombre_base=f"analisis_{nombre_base}",
+        formato='excel',
+        directorio=directorio_resultados
+    )
+    
+    return {
+        'success': True,
+        'ruta_excel': ruta_excel,
+        'resultados': resultados,
+        'total_textos': len(df)
+    }

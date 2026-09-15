@@ -4,6 +4,7 @@ from app import db
 from app.models import Encuesta, Pregunta, Opcion, Respuesta
 from werkzeug.utils import secure_filename
 import os
+import re
 import pandas as pd
 from datetime import datetime
 from io import BytesIO
@@ -15,6 +16,42 @@ ALLOWED_EXTENSIONS = {'xlsx', 'xls', 'csv'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+# ============================================
+# FUNCIÓN PARA LIMPIAR NOMBRES DE ARCHIVO
+# ============================================
+
+def limpiar_nombre_archivo(texto, max_length=30):
+    """
+    Limpia un texto para usarlo como nombre de archivo.
+    Elimina tildes, caracteres especiales y espacios.
+    
+    Ejemplo:
+        "Evaluación de Satisfacción General 2026"
+        → "Evaluacion_de_Satisfaccion_Genera"
+    """
+    if not texto:
+        return "sin_titulo"
+    
+    # Normalizar y eliminar tildes/ñ
+    texto = unicodedata.normalize('NFKD', str(texto))
+    texto = texto.encode('ASCII', 'ignore').decode('ASCII')
+    
+    # Reemplazar caracteres no permitidos por guión bajo
+    texto = re.sub(r'[^a-zA-Z0-9_-]', '_', texto)
+    
+    # Eliminar guiones bajos múltiples
+    texto = re.sub(r'_+', '_', texto)
+    
+    # Quitar guiones al inicio y final
+    texto = texto.strip('_')
+    
+    # Limitar longitud
+    if len(texto) > max_length:
+        texto = texto[:max_length].rstrip('_')
+    
+    return texto if texto else "sin_titulo"
 
 
 # ============================================
@@ -59,7 +96,6 @@ def mapear_valor_opcion(valor, opciones):
     if len(opciones) == 2:
         opciones_texto = [normalizar_texto(o.texto) for o in opciones]
         if 'si' in opciones_texto and 'no' in opciones_texto:
-            # Mapear 0 → No, 1 → Sí
             if valor_str == '0':
                 for opcion in opciones:
                     if normalizar_texto(opcion.texto) == 'no':
@@ -398,11 +434,14 @@ def exportar_respuestas(encuesta_id):
     
     output.seek(0)
     
+    # ✅ NOMBRE LIMPIO
+    titulo_limpio = limpiar_nombre_archivo(encuesta.titulo)
+    
     return send_file(
         output,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         as_attachment=True,
-        download_name=f'respuestas_{encuesta.titulo[:30]}_{datetime.now().strftime("%Y%m%d")}.xlsx'
+        download_name=f'respuestas_{titulo_limpio}_{datetime.now().strftime("%Y%m%d")}.xlsx'
     )
 
 
@@ -584,7 +623,7 @@ def cargar_respuestas_ajax(encuesta_id):
 
 
 # ============================================
-# RUTA: EXPORTAR DATOS CUALITATIVOS
+# RUTA: EXPORTAR DATOS CUALITATIVOS (Excel)
 # ============================================
 
 @respuestas_bp.route('/encuesta/<int:encuesta_id>/exportar/cualitativos')
@@ -605,16 +644,19 @@ def exportar_cualitativos(encuesta_id):
         flash('⚠️ No hay preguntas cualitativas (texto libre) en esta encuesta', 'warning')
         return redirect(url_for('respuestas.ver_respuestas', encuesta_id=encuesta_id))
     
+    # ✅ NOMBRE LIMPIO
+    titulo_limpio = limpiar_nombre_archivo(encuesta.titulo)
+    
     return send_file(
         output,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         as_attachment=True,
-        download_name=f'datos_cualitativos_{encuesta.titulo[:30]}_{datetime.now().strftime("%Y%m%d")}.xlsx'
+        download_name=f'datos_cualitativos_{titulo_limpio}_{datetime.now().strftime("%Y%m%d")}.xlsx'
     )
 
 
 # ============================================
-# RUTA: EXPORTAR DATOS CUANTITATIVOS
+# RUTA: EXPORTAR DATOS CUANTITATIVOS (Excel)
 # ============================================
 
 @respuestas_bp.route('/encuesta/<int:encuesta_id>/exportar/cuantitativos')
@@ -635,9 +677,57 @@ def exportar_cuantitativos(encuesta_id):
         flash('⚠️ No hay preguntas cuantitativas (cerradas) en esta encuesta', 'warning')
         return redirect(url_for('respuestas.ver_respuestas', encuesta_id=encuesta_id))
     
+    # ✅ NOMBRE LIMPIO
+    titulo_limpio = limpiar_nombre_archivo(encuesta.titulo)
+    
     return send_file(
         output,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         as_attachment=True,
-        download_name=f'datos_cuantitativos_{encuesta.titulo[:30]}_{datetime.now().strftime("%Y%m%d")}.xlsx'
+        download_name=f'datos_cuantitativos_{titulo_limpio}_{datetime.now().strftime("%Y%m%d")}.xlsx'
     )
+
+
+# ============================================
+# RUTA: EXPORTAR CSV PARA MOTOR CUALITATIVO
+# ============================================
+
+@respuestas_bp.route('/encuesta/<int:encuesta_id>/exportar/cualitativo-csv')
+@login_required
+def exportar_cualitativo_csv(encuesta_id):
+    """
+    Exporta las respuestas de texto libre a un CSV compatible con el motor cualitativo.
+    """
+    from app.utils.exportar_cualitativo_csv import exportar_respuestas_cualitativas
+    
+    encuesta = Encuesta.query.get_or_404(encuesta_id)
+    
+    if encuesta.usuario_id != current_user.id:
+        flash('No tienes permiso para exportar esta encuesta', 'danger')
+        return redirect(url_for('encuestas.mis_encuestas'))
+    
+    try:
+        # Generar el CSV
+        resultado = exportar_respuestas_cualitativas(encuesta_id)
+        
+        if not resultado or not resultado.get('ruta'):
+            flash(f"⚠️ {resultado.get('mensaje', 'No hay datos para exportar')}", 'warning')
+            return redirect(url_for('respuestas.ver_respuestas', encuesta_id=encuesta_id))
+        
+        # ✅ NOMBRE LIMPIO
+        titulo_limpio = limpiar_nombre_archivo(encuesta.titulo)
+        nombre_limpio = f"cualitativo_{encuesta_id}_{titulo_limpio}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        
+        # Enviar el archivo al usuario
+        return send_file(
+            resultado['ruta'],
+            mimetype='text/csv; charset=utf-8',
+            as_attachment=True,
+            download_name=nombre_limpio
+        )
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        flash(f'❌ Error al exportar: {str(e)}', 'danger')
+        return redirect(url_for('respuestas.ver_respuestas', encuesta_id=encuesta_id))

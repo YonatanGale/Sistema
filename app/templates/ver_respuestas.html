@@ -34,8 +34,16 @@
                     </li>
                     <li>
                         <a class="dropdown-item" href="{{ url_for('respuestas.exportar_cualitativos', encuesta_id=encuesta.id) }}">
-                            <i class="bi bi-chat-text"></i> Datos cualitativos
+                            <i class="bi bi-chat-text"></i> Datos cualitativos (Excel)
                             <small class="text-muted d-block">Preguntas abiertas + respuestas "Otro"</small>
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <a class="dropdown-item text-primary fw-bold" 
+                           href="{{ url_for('respuestas.exportar_cualitativo_csv', encuesta_id=encuesta.id) }}">
+                            <i class="bi bi-filetype-csv"></i> Exportar CSV para Motor IA
+                            <small class="text-muted d-block">Formato para análisis cualitativo</small>
                         </a>
                     </li>
                 </ul>
