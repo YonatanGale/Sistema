@@ -17,6 +17,18 @@ from nltk.corpus import stopwords
 import logging
 import os
 
+# ✅ IMPORTAR REGLAS HEURÍSTICAS
+try:
+    from mejoras_sentimiento import aplicar_ajustes, ajustar_sentimiento
+    MEJORAS_DISPONIBLES = True
+except ImportError:
+    try:
+        from .mejoras_sentimiento import aplicar_ajustes, ajustar_sentimiento
+        MEJORAS_DISPONIBLES = True
+    except ImportError:
+        MEJORAS_DISPONIBLES = False
+        print("⚠️ No se encontró mejoras_sentimiento.py - Los ajustes heurísticos no están disponibles")
+
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,19 +39,20 @@ class AnalizadorCualitativo:
     Soporta: Análisis de sentimiento, extracción de TF-IDF, clasificación de temas.
     """
     
-    def __init__(self, modelo_sentimiento=None, modelo_temas=None, cache_dir=None):
+    def __init__(self, modelo_sentimiento=None, modelo_temas=None, cache_dir=None, usar_mejoras=True):
         """
         Inicializa el motor con los modelos seleccionados.
         
         Args:
             modelo_sentimiento: Nombre del modelo para análisis de sentimiento
-                              (default: 'dccuchile/bert-base-spanish-wwm-uncased')
             modelo_temas: Nombre del modelo para clasificación de temas
             cache_dir: Directorio para cache de modelos
+            usar_mejoras: Si True, aplica reglas heurísticas para mejorar sentimiento
         """
         self.modelo_sentimiento = modelo_sentimiento or 'dccuchile/bert-base-spanish-wwm-uncased'
         self.modelo_temas = modelo_temas or 'dccuchile/bert-base-spanish-wwm-uncased'
         self.cache_dir = cache_dir or 'data/modelos'
+        self.usar_mejoras = usar_mejoras and MEJORAS_DISPONIBLES
         
         # Crear directorio de cache
         os.makedirs(self.cache_dir, exist_ok=True)
@@ -52,6 +65,11 @@ class AnalizadorCualitativo:
         
         self._cargar_modelos()
         self._descargar_recursos_nltk()
+        
+        if self.usar_mejoras:
+            logger.info("✅ Reglas heurísticas de sentimiento ACTIVADAS")
+        else:
+            logger.info("⚠️ Reglas heurísticas de sentimiento DESACTIVADAS")
     
     def _descargar_recursos_nltk(self):
         """Descarga recursos de NLTK necesarios"""
@@ -127,17 +145,21 @@ class AnalizadorCualitativo:
     # ANÁLISIS DE SENTIMIENTO
     # ============================================
     
-    def analizar_sentimiento(self, textos, batch_size=16):
+    def analizar_sentimiento(self, textos, batch_size=16, aplicar_mejoras=None):
         """
         Analiza el sentimiento de una lista de textos.
         
         Args:
             textos: Lista de strings o DataFrame con columna 'texto'
             batch_size: Tamaño del batch para procesamiento
+            aplicar_mejoras: Si None, usa el valor por defecto del analizador
             
         Returns:
             DataFrame con resultados de sentimiento
         """
+        if aplicar_mejoras is None:
+            aplicar_mejoras = self.usar_mejoras
+        
         if isinstance(textos, pd.DataFrame):
             if 'texto' in textos.columns:
                 textos = textos['texto'].tolist()
@@ -183,6 +205,31 @@ class AnalizadorCualitativo:
                 lambda x: self._mapear_sentimiento(x)
             )
         
+        # ============================================
+        # ✅ APLICAR REGLAS HEURÍSTICAS
+        # ============================================
+        if aplicar_mejoras and MEJORAS_DISPONIBLES:
+            logger.info("Aplicando reglas heurísticas de sentimiento...")
+            
+            sentimientos_ajustados = []
+            scores_ajustados = []
+            
+            for idx, row in df_resultados.iterrows():
+                texto = row.get('texto', '')
+                sent_original = row.get('sentimiento', 'Neutral')
+                score_original = row.get('score', 0.5)
+                
+                sent_ajustado, score_ajustado = ajustar_sentimiento(
+                    texto, sent_original, score_original
+                )
+                
+                sentimientos_ajustados.append(sent_ajustado)
+                scores_ajustados.append(score_ajustado)
+            
+            df_resultados['sentimiento_original'] = df_resultados['sentimiento']
+            df_resultados['sentimiento'] = sentimientos_ajustados
+            df_resultados['score'] = scores_ajustados
+        
         return df_resultados
     
     def _mapear_sentimiento(self, label):
@@ -203,7 +250,6 @@ class AnalizadorCualitativo:
         """Análisis de sentimiento simple con NLTK"""
         resultados = []
         for texto in textos:
-            # Asegurarse de que sea string
             texto = str(texto) if texto is not None else ""
             if not texto.strip():
                 resultados.append({
@@ -241,26 +287,13 @@ class AnalizadorCualitativo:
     # ============================================
     
     def extraer_palabras_clave(self, textos, n_top=10, max_features=1000):
-        """
-        Extrae palabras clave usando TF-IDF.
-        
-        Args:
-            textos: Lista de strings o DataFrame
-            n_top: Número de palabras clave a extraer
-            max_features: Máximo de características para TF-IDF
-            
-        Returns:
-            DataFrame con palabras clave y sus puntuaciones
-        """
+        """Extrae palabras clave usando TF-IDF."""
         if isinstance(textos, pd.DataFrame):
             if 'texto' in textos.columns:
                 textos = textos['texto'].tolist()
             else:
                 textos = textos.iloc[:, 0].tolist()
         
-        # ============================================
-        # FILTRAR Y CONVERTIR A STRING
-        # ============================================
         textos_limpios = []
         for t in textos:
             if t is not None and pd.notna(t):
@@ -274,18 +307,10 @@ class AnalizadorCualitativo:
             return pd.DataFrame({'palabra': [], 'tfidf_score': [], 'frecuencia': []})
         
         textos_procesados = self._preprocesar_textos(textos)
-        
         stopwords_es = self._obtener_stopwords_espanol()
         
-        # Ajustar parámetros para datasets pequeños
         n_docs = len(textos_procesados)
-        
-        if n_docs < 5:
-            min_df = 1
-        else:
-            min_df = 2
-        
-        # Limitar max_features para datasets pequeños
+        min_df = 1 if n_docs < 5 else 2
         max_features = min(max_features, max(50, n_docs * 5))
         
         self.tfidf_vectorizer = TfidfVectorizer(
@@ -299,9 +324,7 @@ class AnalizadorCualitativo:
         try:
             tfidf_matrix = self.tfidf_vectorizer.fit_transform(textos_procesados)
         except ValueError as e:
-            logger.warning(f"TF-IDF falló con parámetros ajustados: {e}")
-            logger.info("Intentando con min_df=1 y max_df=1.0...")
-            
+            logger.warning(f"TF-IDF falló: {e}")
             self.tfidf_vectorizer = TfidfVectorizer(
                 max_features=50,
                 stop_words=list(stopwords_es),
@@ -318,11 +341,7 @@ class AnalizadorCualitativo:
         if len(feature_names) == 0 or len(promedio_scores) == 0:
             return pd.DataFrame({'palabra': [], 'tfidf_score': [], 'frecuencia': []})
         
-        # ============================================
-        # CORREGIDO: Ajustar n_top al número real de características
-        # ============================================
         n_top = min(n_top, len(feature_names))
-        
         if n_top == 0:
             return pd.DataFrame({'palabra': [], 'tfidf_score': [], 'frecuencia': []})
         
@@ -338,9 +357,6 @@ class AnalizadorCualitativo:
         
         df_keywords = pd.DataFrame(palabras_clave)
         
-        # ============================================
-        # CORREGIDO: Asegurar que la longitud coincida
-        # ============================================
         if len(df_keywords) > 0:
             palabras_por_documento = []
             for i, doc in enumerate(textos):
@@ -352,11 +368,7 @@ class AnalizadorCualitativo:
                     palabras = []
                 palabras_por_documento.append(palabras)
             
-            # ============================================
-            # CORREGIDO: Asegurar que la longitud coincida exactamente
-            # ============================================
             documentos_asociados = palabras_por_documento[:len(df_keywords)]
-            # Si hay menos documentos, rellenar con listas vacías
             while len(documentos_asociados) < len(df_keywords):
                 documentos_asociados.append([])
             df_keywords['documentos_asociados'] = documentos_asociados
@@ -378,27 +390,13 @@ class AnalizadorCualitativo:
     # ============================================
     
     def clasificar_temas(self, textos, n_temas=5, max_features=1000, n_top_words=10):
-        """
-        Clasifica textos en temas usando LDA.
-        
-        Args:
-            textos: Lista de strings o DataFrame
-            n_temas: Número de temas a identificar
-            max_features: Máximo de características
-            n_top_words: Número de palabras por tema
-            
-        Returns:
-            Dict con temas y asignaciones
-        """
+        """Clasifica textos en temas usando LDA."""
         if isinstance(textos, pd.DataFrame):
             if 'texto' in textos.columns:
                 textos = textos['texto'].tolist()
             else:
                 textos = textos.iloc[:, 0].tolist()
         
-        # ============================================
-        # FILTRAR Y CONVERTIR A STRING
-        # ============================================
         textos_limpios = []
         for t in textos:
             if t is not None and pd.notna(t):
@@ -416,7 +414,6 @@ class AnalizadorCualitativo:
             }
         
         textos_procesados = self._preprocesar_textos(textos)
-        
         stopwords_es = self._obtener_stopwords_espanol()
         vectorizer = TfidfVectorizer(
             max_features=max_features,
@@ -428,7 +425,6 @@ class AnalizadorCualitativo:
         tfidf_matrix = vectorizer.fit_transform(textos_procesados)
         feature_names = vectorizer.get_feature_names_out()
         
-        # Ajustar número de temas al número de documentos
         n_temas = min(n_temas, len(textos))
         n_temas = max(n_temas, 2)
         
@@ -477,26 +473,13 @@ class AnalizadorCualitativo:
     # ============================================
     
     def analizar_completo(self, textos, n_temas=5, n_keywords=10):
-        """
-        Realiza análisis completo: sentimiento, TF-IDF y temas.
-        
-        Args:
-            textos: Lista de strings o DataFrame
-            n_temas: Número de temas
-            n_keywords: Número de palabras clave
-            
-        Returns:
-            Dict con todos los resultados
-        """
+        """Realiza análisis completo: sentimiento, TF-IDF y temas."""
         if isinstance(textos, pd.DataFrame):
             if 'texto' in textos.columns:
                 textos = textos['texto'].tolist()
             else:
                 textos = textos.iloc[:, 0].tolist()
         
-        # ============================================
-        # FILTRAR Y CONVERTIR A STRING
-        # ============================================
         textos_limpios = []
         for t in textos:
             if t is not None and pd.notna(t):
@@ -523,9 +506,6 @@ class AnalizadorCualitativo:
         logger.info("Extrayendo palabras clave...")
         try:
             df_keywords = self.extraer_palabras_clave(df_textos, n_top=n_keywords)
-            # ============================================
-            # CORREGIDO: Si no hay palabras clave, devolver DataFrame vacío
-            # ============================================
             if df_keywords is None or df_keywords.empty:
                 df_keywords = pd.DataFrame({'palabra': [], 'tfidf_score': [], 'frecuencia': []})
         except Exception as e:
@@ -546,6 +526,10 @@ class AnalizadorCualitativo:
         df_resultados = df_textos.copy()
         df_resultados['sentimiento'] = df_sentimiento['sentimiento'] if 'sentimiento' in df_sentimiento.columns else 'Neutral'
         df_resultados['score_confianza'] = df_sentimiento['score'] if 'score' in df_sentimiento.columns else 0.5
+        
+        # Guardar sentimiento original si existe
+        if 'sentimiento_original' in df_sentimiento.columns:
+            df_resultados['sentimiento_original'] = df_sentimiento['sentimiento_original']
         
         if 'asignaciones' in temas_resultados and not temas_resultados['asignaciones'].empty:
             df_resultados['tema'] = temas_resultados['asignaciones']['tema_nombre']
