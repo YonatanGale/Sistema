@@ -1,6 +1,5 @@
-# motor_cualitativo/requirements.txt
 # ============================================
-# DEPENDENCIAS DEL MOTOR DE ANÁLISIS CUALITATIVO
+# MOTOR DE ANÁLISIS CUALITATIVO - DEPENDENCIAS
 # ============================================
 
 # Transformers y Deep Learning
@@ -25,3 +24,6 @@ plotly
 tqdm
 openpyxl
 xlrd
+
+# Generación de PDF (usado por el wrapper)
+reportlab
