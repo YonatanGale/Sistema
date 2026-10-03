@@ -1,10 +1,51 @@
+# ============================================
+# SISTEMA DE ENCUESTAS - DEPENDENCIAS COMPLETAS
+# ============================================
+
+# ============================================
+# FLASK (Sistema web)
+# ============================================
 Flask
 Flask-SQLAlchemy
 Flask-Login
+Flask-WTF
 Werkzeug
 python-dotenv
 pymysql
 cryptography
-Flask-WTF
+
+# ============================================
+# PROCESAMIENTO DE DATOS
+# ============================================
 pandas
 openpyxl
+numpy
+
+# ============================================
+# MOTOR CUALITATIVO (IA/NLP)
+# ============================================
+torch
+transformers
+sentencepiece
+tokenizers
+nltk
+scikit-learn
+
+# ============================================
+# VISUALIZACIÓN
+# ============================================
+matplotlib
+seaborn
+wordcloud
+plotly
+
+# ============================================
+# GENERACIÓN DE PDF
+# ============================================
+reportlab
+
+# ============================================
+# UTILIDADES
+# ============================================
+tqdm
+xlrd
