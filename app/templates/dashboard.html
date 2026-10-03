@@ -7,8 +7,10 @@
     <div class="row">
         <div class="col text-center mb-5">
             <h1 class="display-4 fw-bold">
+                <i class="bi bi-clipboard-data text-primary"></i> Sistema de Encuestas
             </h1>
             <p class="lead text-muted">
+                Gestión y análisis de encuestas para la toma de decisiones
             </p>
             <hr class="w-50 mx-auto">
         </div>
@@ -16,14 +18,14 @@
 
     <div class="row g-4 justify-content-center">
         <!-- Crear Encuesta -->
-        <div class="col-md-4">
+        <div class="col-md-6 col-lg-3">
             <div class="card card-custom text-center h-100 shadow-hover">
                 <div class="card-body py-5">
                     <div class="display-1 text-primary mb-4">
                         <i class="bi bi-file-earmark-plus"></i>
                     </div>
                     <h5 class="card-title fw-bold">Crear Encuesta</h5>
-                    <p class="card-text text-muted">Diseña tu encuesta desde cero con preguntas y opciones</p>
+                    <p class="card-text text-muted small">Diseña tu encuesta desde cero</p>
                     <a href="{{ url_for('encuestas.crear_encuesta') }}" class="btn btn-custom btn-custom-primary mt-3">
                         <i class="bi bi-plus-circle"></i> Crear
                     </a>
@@ -32,14 +34,14 @@
         </div>
 
         <!-- Mis Encuestas -->
-        <div class="col-md-4">
+        <div class="col-md-6 col-lg-3">
             <div class="card card-custom text-center h-100 shadow-hover">
                 <div class="card-body py-5">
                     <div class="display-1 text-success mb-4">
                         <i class="bi bi-list-ul"></i>
                     </div>
                     <h5 class="card-title fw-bold">Mis Encuestas</h5>
-                    <p class="card-text text-muted">Gestiona, edita y visualiza tus encuestas creadas</p>
+                    <p class="card-text text-muted small">Gestiona y visualiza tus encuestas</p>
                     <a href="{{ url_for('encuestas.mis_encuestas') }}" class="btn btn-custom btn-custom-success mt-3">
                         <i class="bi bi-eye"></i> Ver
                     </a>
@@ -47,20 +49,36 @@
             </div>
         </div>
 
-        <!-- Cargar Respuestas - ABRE MODAL -->
-        <div class="col-md-4">
+        <!-- Cargar Respuestas -->
+        <div class="col-md-6 col-lg-3">
             <div class="card card-custom text-center h-100 shadow-hover">
                 <div class="card-body py-5">
                     <div class="display-1 text-warning mb-4">
                         <i class="bi bi-upload"></i>
                     </div>
                     <h5 class="card-title fw-bold">Cargar Respuestas</h5>
-                    <p class="card-text text-muted">Importa respuestas desde archivos Excel o CSV</p>
+                    <p class="card-text text-muted small">Importa desde Excel o CSV</p>
                     <button class="btn btn-custom btn-custom-warning mt-3" 
                             data-bs-toggle="modal" 
                             data-bs-target="#modalSeleccionarEncuesta">
                         <i class="bi bi-upload"></i> Seleccionar
                     </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Motor de Análisis Cualitativo -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card card-custom text-center h-100 shadow-hover border-success">
+                <div class="card-body py-5">
+                    <div class="display-1 text-info mb-4">
+                        <i class="bi bi-cpu"></i>
+                    </div>
+                    <h5 class="card-title fw-bold">Motor de Análisis</h5>
+                    <p class="card-text text-muted small">Análisis cualitativo con IA</p>
+                    <a href="{{ url_for('analisis.motor_analisis') }}" class="btn btn-custom btn-info mt-3">
+                        <i class="bi bi-play-circle"></i> Analizar
+                    </a>
                 </div>
             </div>
         </div>
