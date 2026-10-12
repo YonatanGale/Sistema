@@ -731,3 +731,44 @@ def exportar_cualitativo_csv(encuesta_id):
         traceback.print_exc()
         flash(f'❌ Error al exportar: {str(e)}', 'danger')
         return redirect(url_for('respuestas.ver_respuestas', encuesta_id=encuesta_id))
+
+# ============================================
+# RUTA: EXPORTAR CSV PARA MOTOR CUANTITATIVO
+# ============================================
+
+@respuestas_bp.route('/encuesta/<int:encuesta_id>/exportar/cuantitativo-csv')
+@login_required
+def exportar_cuantitativo_csv(encuesta_id):
+    """
+    Exporta las respuestas cuantitativas a un CSV compatible con el motor cuantitativo.
+    """
+    from app.utils.exportar_cuantitativo_csv import exportar_respuestas_cuantitativas
+    
+    encuesta = Encuesta.query.get_or_404(encuesta_id)
+    
+    if encuesta.usuario_id != current_user.id:
+        flash('No tienes permiso para exportar esta encuesta', 'danger')
+        return redirect(url_for('encuestas.mis_encuestas'))
+    
+    try:
+        resultado = exportar_respuestas_cuantitativas(encuesta_id)
+        
+        if not resultado or not resultado.get('ruta'):
+            flash(f"⚠️ {resultado.get('mensaje', 'No hay datos para exportar')}", 'warning')
+            return redirect(url_for('respuestas.ver_respuestas', encuesta_id=encuesta_id))
+        
+        titulo_limpio = limpiar_nombre_archivo(encuesta.titulo)
+        nombre_limpio = f"cuantitativo_{encuesta_id}_{titulo_limpio}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        
+        return send_file(
+            resultado['ruta'],
+            mimetype='text/csv; charset=utf-8',
+            as_attachment=True,
+            download_name=nombre_limpio
+        )
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        flash(f'❌ Error al exportar: {str(e)}', 'danger')
+        return redirect(url_for('respuestas.ver_respuestas', encuesta_id=encuesta_id))

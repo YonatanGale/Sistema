@@ -50,3 +50,10 @@ reportlab
 tqdm
 xlrd
 openpyxl
+
+# ============================================
+# MOTOR CUANTITATIVO
+# ============================================
+
+scipy
+xlsxwriter

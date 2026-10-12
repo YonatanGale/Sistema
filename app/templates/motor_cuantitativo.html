@@ -1,0 +1,805 @@
+{% extends "base.html" %}
+
+{% block title %}Motor de Análisis Cuantitativo{% endblock %}
+
+{% block extra_css %}
+<style>
+    .drop-zone-cuanti {
+        border: 3px dashed #dee2e6;
+        border-radius: 10px;
+        padding: 3rem 2rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        background-color: #f8f9fa;
+    }
+    .drop-zone-cuanti:hover,
+    .drop-zone-cuanti.dragover {
+        border-color: #9b59b6;
+        background-color: #f4ecf7;
+    }
+    .drop-zone-cuanti i { font-size: 4rem; color: #6c757d; }
+    .drop-zone-cuanti.dragover i { color: #9b59b6; }
+    
+    .loading-analisis { display: none; text-align: center; padding: 40px; }
+    .loading-analisis.show { display: block; }
+    .resultados-container { display: none; }
+    .resultados-container.show { display: block; }
+    
+    .kpi-card {
+        border-radius: 12px;
+        padding: 20px;
+        color: white;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+    }
+    .kpi-card:hover { transform: translateY(-3px); }
+    .kpi-card .kpi-value { font-size: 2.5rem; font-weight: 700; line-height: 1; }
+    .kpi-card .kpi-label { font-size: 0.9rem; opacity: 0.9; margin-top: 5px; }
+    .kpi-card .kpi-icon { font-size: 3rem; opacity: 0.3; position: absolute; right: 15px; top: 15px; }
+    .kpi-primary { background: linear-gradient(135deg, #9b59b6, #8e44ad); }
+    .kpi-success { background: linear-gradient(135deg, #2ecc71, #27ae60); }
+    .kpi-warning { background: linear-gradient(135deg, #f39c12, #e67e22); }
+    .kpi-info    { background: linear-gradient(135deg, #3498db, #2980b9); }
+    
+    .grafico-card {
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        transition: all 0.3s ease;
+        background: white;
+        height: 100%;
+    }
+    .grafico-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.15); }
+    .grafico-card img { width: 100%; height: auto; cursor: pointer; display: block; }
+    .grafico-card .grafico-titulo {
+        padding: 12px 15px;
+        background: #f8f9fa;
+        border-bottom: 1px solid #e9ecef;
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: #2c3e50;
+    }
+    
+    .paso-analisis {
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+        border-radius: 8px;
+        background-color: #e9ecef;
+        opacity: 0.5;
+        transition: all 0.3s ease;
+    }
+    .paso-analisis.activo {
+        opacity: 1;
+        background-color: #e8daef;
+        border-left: 4px solid #9b59b6;
+    }
+    
+    .spinner-grande { width: 4rem; height: 4rem; color: #9b59b6; }
+    
+    .correlacion-item {
+        padding: 10px 15px;
+        border-left: 4px solid #3498db;
+        background: #f8f9fa;
+        border-radius: 6px;
+        margin-bottom: 8px;
+    }
+    .correlacion-item.fuerte { border-left-color: #e74c3c; }
+    .correlacion-item.moderada { border-left-color: #f39c12; }
+    .correlacion-item.debil { border-left-color: #95a5a6; }
+    
+    .indice-circular {
+        width: 160px;
+        height: 160px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+        background: conic-gradient(
+            var(--color-indice) 0deg,
+            var(--color-indice) calc(var(--valor) * 3.6deg),
+            #ecf0f1 calc(var(--valor) * 3.6deg),
+            #ecf0f1 360deg
+        );
+    }
+    .indice-circular-inner {
+        width: 125px;
+        height: 125px;
+        border-radius: 50%;
+        background: white;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    .indice-circular .indice-valor { font-size: 2.2rem; font-weight: 700; color: #2c3e50; }
+    .indice-circular .indice-max { font-size: 0.8rem; color: #7f8c8d; }
+    
+    .nav-pills .nav-link {
+        color: #495057;
+        border-radius: 8px;
+        padding: 8px 16px;
+        font-weight: 500;
+        font-size: 0.9rem;
+    }
+    .nav-pills .nav-link.active {
+        background: linear-gradient(135deg, #9b59b6, #8e44ad);
+        color: white;
+    }
+    
+    .modal-imagen .modal-body {
+        text-align: center;
+        background: #2c3e50;
+        padding: 10px;
+    }
+    .modal-imagen .modal-body img { max-width: 100%; max-height: 85vh; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="row">
+        <div class="col-12 text-center mb-4">
+            <h1 class="display-5 fw-bold">
+                <i class="bi bi-graph-up-arrow text-primary"></i>
+                Motor de Análisis Cuantitativo
+            </h1>
+            <p class="lead text-muted">
+                Estadísticas, correlaciones, gráficos e índice de satisfacción
+            </p>
+            <hr class="w-50 mx-auto">
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-10 mx-auto">
+            <!-- SECCIÓN DE CARGA -->
+            <div class="card card-custom" id="cardCarga">
+                <div class="card-header" style="background: linear-gradient(135deg, #9b59b6, #8e44ad); color: white;">
+                    <h5 class="mb-0">
+                        <i class="bi bi-upload"></i> Subir archivo CSV
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>¿Cómo funciona?</strong>
+                        <ol class="mb-0 mt-2">
+                            <li>Sube el archivo CSV que descargaste desde <strong>Respuestas → Exportar → Exportar CSV Cuantitativo</strong></li>
+                            <li>El motor calculará estadísticas, correlaciones, gráficos e índice de satisfacción</li>
+                            <li>Al final podrás descargar los resultados en Excel o PDF</li>
+                        </ol>
+                    </div>
+
+                    <form id="formAnalisisCuanti" enctype="multipart/form-data">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <div class="drop-zone-cuanti" id="dropZoneCuanti">
+                            <i class="bi bi-cloud-arrow-up"></i>
+                            <h5 class="mt-3">Arrastra tu archivo CSV aquí</h5>
+                            <p class="text-muted">o haz clic para seleccionar</p>
+                            <input type="file" class="d-none" id="archivoCuanti" name="archivo" accept=".csv" required>
+                        </div>
+
+                        <div class="file-info mt-3" id="fileInfoCuanti" style="display: none;">
+                            <div class="alert alert-success">
+                                <i class="bi bi-file-earmark-spreadsheet"></i>
+                                <span id="fileNameCuanti">archivo.csv</span>
+                                <button type="button" class="btn btn-sm btn-outline-danger float-end" onclick="limpiarArchivoCuanti()">
+                                    <i class="bi bi-x-circle"></i> Quitar
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="text-center mt-3">
+                            <button type="submit" class="btn btn-custom btn-lg" id="btnAnalizarCuanti" disabled
+                                    style="background: linear-gradient(135deg, #9b59b6, #8e44ad); color: white;">
+                                <i class="bi bi-cpu"></i> Iniciar Análisis
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- LOADING -->
+            <div class="loading-analisis" id="loadingAnalisisCuanti">
+                <div class="card card-custom">
+                    <div class="card-body text-center py-5">
+                        <div class="spinner-border spinner-grande" role="status">
+                            <span class="visually-hidden">Analizando...</span>
+                        </div>
+                        <h4 class="mt-4">Analizando datos...</h4>
+                        <p class="text-muted">El motor está procesando los datos</p>
+                        
+                        <div class="mt-4 text-start">
+                            <div class="paso-analisis activo" id="paso1">
+                                <i class="bi bi-1-circle"></i> Leyendo archivo CSV...
+                            </div>
+                            <div class="paso-analisis" id="paso2">
+                                <i class="bi bi-2-circle"></i> Calculando estadísticas descriptivas...
+                            </div>
+                            <div class="paso-analisis" id="paso3">
+                                <i class="bi bi-3-circle"></i> Calculando correlaciones (Spearman)...
+                            </div>
+                            <div class="paso-analisis" id="paso4">
+                                <i class="bi bi-4-circle"></i> Analizando grupos e índice de satisfacción...
+                            </div>
+                            <div class="paso-analisis" id="paso5">
+                                <i class="bi bi-5-circle"></i> Generando gráficos...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RESULTADOS -->
+            <div class="resultados-container" id="resultadosCuanti">
+                
+                <!-- KPIs -->
+                <div class="row g-3 mt-2">
+                    <div class="col-md-3">
+                        <div class="kpi-card kpi-primary position-relative">
+                            <i class="bi bi-people-fill kpi-icon"></i>
+                            <div class="kpi-value" id="kpiEncuestados">0</div>
+                            <div class="kpi-label">Encuestados</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="kpi-card kpi-info position-relative">
+                            <i class="bi bi-question-circle-fill kpi-icon"></i>
+                            <div class="kpi-value" id="kpiPreguntas">0</div>
+                            <div class="kpi-label">Preguntas</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="kpi-card kpi-success position-relative">
+                            <i class="bi bi-star-fill kpi-icon"></i>
+                            <div class="kpi-value" id="kpiIndice">N/A</div>
+                            <div class="kpi-label">Índice de satisfacción</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="kpi-card kpi-warning position-relative">
+                            <i class="bi bi-diagram-3-fill kpi-icon"></i>
+                            <div class="kpi-value" id="kpiCorrelaciones">0</div>
+                            <div class="kpi-label">Correlaciones</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TABS -->
+                <ul class="nav nav-pills my-4" id="pills-tab" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#tab-graficos">
+                            <i class="bi bi-bar-chart-line"></i> Gráficos
+                            <span class="badge bg-light text-dark ms-1" id="badgeGraficos">0</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-estadisticas">
+                            <i class="bi bi-calculator"></i> Estadísticas
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-correlaciones">
+                            <i class="bi bi-link-45deg"></i> Correlaciones
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-grupos">
+                            <i class="bi bi-people"></i> Grupos
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-satisfaccion">
+                            <i class="bi bi-star"></i> Satisfacción
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content">
+                    <!-- Gráficos -->
+                    <div class="tab-pane fade show active" id="tab-graficos">
+                        <div class="row g-3" id="contenedorGraficos"></div>
+                    </div>
+
+                    <!-- Estadísticas -->
+                    <div class="tab-pane fade" id="tab-estadisticas">
+                        <div class="card card-custom">
+                            <div class="card-header bg-light">
+                                <h5 class="mb-0"><i class="bi bi-calculator"></i> Estadísticas Descriptivas</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover">
+                                        <thead class="table-dark">
+                                            <tr>
+                                                <th>Pregunta</th>
+                                                <th>N</th>
+                                                <th>Media</th>
+                                                <th>Mediana</th>
+                                                <th>Moda</th>
+                                                <th>Desv. Est.</th>
+                                                <th>Min</th>
+                                                <th>Max</th>
+                                                <th>Q1</th>
+                                                <th>Q3</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tbodyEstadisticas"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card card-custom mt-3">
+                            <div class="card-header bg-light">
+                                <h5 class="mb-0"><i class="bi bi-list-ol"></i> Frecuencias</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                                    <table class="table table-sm table-hover">
+                                        <thead class="table-dark sticky-top">
+                                            <tr>
+                                                <th>Pregunta</th>
+                                                <th>Opción</th>
+                                                <th>Frecuencia</th>
+                                                <th>%</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tbodyFrecuencias"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Correlaciones -->
+                    <div class="tab-pane fade" id="tab-correlaciones">
+                        <div id="contenedorCorrelaciones"></div>
+                    </div>
+
+                    <!-- Grupos -->
+                    <div class="tab-pane fade" id="tab-grupos">
+                        <div id="contenedorGrupos"></div>
+                    </div>
+
+                    <!-- Satisfacción -->
+                    <div class="tab-pane fade" id="tab-satisfaccion">
+                        <div id="contenedorSatisfaccion"></div>
+                    </div>
+                </div>
+
+                <!-- ✅ BOTONES DE ACCIÓN (PDF + EXCEL + REINICIAR) -->
+                <div class="text-center mt-4 mb-5">
+                    <a href="{{ url_for('cuantitativo.descargar_pdf') }}" 
+                       class="btn btn-custom btn-danger btn-lg me-2" 
+                       id="btnDescargarPDF">
+                        <i class="bi bi-file-earmark-pdf"></i> Descargar PDF
+                    </a>
+                    <a href="{{ url_for('cuantitativo.descargar_excel') }}" 
+                       class="btn btn-custom btn-success btn-lg me-2" 
+                       id="btnDescargarExcel">
+                        <i class="bi bi-file-earmark-excel"></i> Descargar Excel
+                    </a>
+                    <button class="btn btn-custom btn-custom-primary btn-lg" 
+                            onclick="reiniciarAnalisisCuanti()">
+                        <i class="bi bi-arrow-clockwise"></i> Analizar otro archivo
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para ver gráfico ampliado -->
+<div class="modal fade modal-imagen" id="modalImagen" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title" id="modalImagenTitulo">Gráfico</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <img id="modalImagenImg" src="" alt="Gráfico">
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dropZone = document.getElementById('dropZoneCuanti');
+    const fileInput = document.getElementById('archivoCuanti');
+    const fileInfo = document.getElementById('fileInfoCuanti');
+    const fileName = document.getElementById('fileNameCuanti');
+    const btnAnalizar = document.getElementById('btnAnalizarCuanti');
+    const form = document.getElementById('formAnalisisCuanti');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length) {
+            fileInput.files = e.dataTransfer.files;
+            mostrarArchivo(e.dataTransfer.files[0]);
+        }
+    });
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length) mostrarArchivo(e.target.files[0]);
+    });
+
+    function mostrarArchivo(file) {
+        if (!file.name.toLowerCase().endsWith('.csv')) {
+            alert('Solo se permiten archivos .csv');
+            fileInput.value = '';
+            return;
+        }
+        fileInfo.style.display = 'block';
+        fileName.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+        btnAnalizar.disabled = false;
+    }
+
+    window.limpiarArchivoCuanti = function() {
+        fileInput.value = '';
+        fileInfo.style.display = 'none';
+        btnAnalizar.disabled = true;
+    };
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        if (!fileInput.files[0]) {
+            alert('Debes seleccionar un archivo');
+            return;
+        }
+
+        document.getElementById('cardCarga').style.display = 'none';
+        document.getElementById('loadingAnalisisCuanti').classList.add('show');
+        document.getElementById('resultadosCuanti').classList.remove('show');
+
+        animarPasos();
+
+        const formData = new FormData();
+        formData.append('archivo', fileInput.files[0]);
+        formData.append('csrf_token', document.querySelector('input[name="csrf_token"]').value);
+
+        fetch('/motor-cuantitativo/analizar', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('loadingAnalisisCuanti').classList.remove('show');
+            
+            if (data.success) {
+                mostrarResultadosCuanti(data);
+                document.getElementById('resultadosCuanti').classList.add('show');
+                document.getElementById('resultadosCuanti').scrollIntoView({ behavior: 'smooth' });
+            } else {
+                alert('Error: ' + (data.message || 'Error al procesar el archivo'));
+                document.getElementById('cardCarga').style.display = 'block';
+                btnAnalizar.disabled = false;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('loadingAnalisisCuanti').classList.remove('show');
+            alert('Error de conexión: ' + error.message);
+            document.getElementById('cardCarga').style.display = 'block';
+            btnAnalizar.disabled = false;
+        });
+    });
+
+    function animarPasos() {
+        const pasos = ['paso1', 'paso2', 'paso3', 'paso4', 'paso5'];
+        pasos.forEach(p => document.getElementById(p).classList.remove('activo'));
+        document.getElementById('paso1').classList.add('activo');
+        
+        let i = 1;
+        const interval = setInterval(() => {
+            if (i < pasos.length) {
+                document.getElementById(pasos[i-1]).classList.remove('activo');
+                document.getElementById(pasos[i]).classList.add('activo');
+                i++;
+            } else {
+                clearInterval(interval);
+            }
+        }, 3000);
+    }
+});
+
+// ============================================
+// MOSTRAR RESULTADOS
+// ============================================
+function mostrarResultadosCuanti(data) {
+    // KPIs
+    document.getElementById('kpiEncuestados').textContent = data.metadata.total_encuestados;
+    document.getElementById('kpiPreguntas').textContent = data.metadata.total_preguntas;
+    document.getElementById('kpiIndice').textContent = 
+        data.indice_satisfaccion && data.indice_satisfaccion.indice_global 
+            ? data.indice_satisfaccion.indice_global : 'N/A';
+    document.getElementById('kpiCorrelaciones').textContent = 
+        data.correlaciones.pares_significativos.length;
+    
+    // Gráficos
+    mostrarGraficos(data.graficos);
+    
+    // Estadísticas
+    mostrarEstadisticas(data.estadisticas_descriptivas);
+    
+    // Frecuencias
+    mostrarFrecuencias(data.frecuencias);
+    
+    // Correlaciones
+    mostrarCorrelaciones(data.correlaciones);
+    
+    // Grupos
+    mostrarGrupos(data.grupos);
+    
+    // Satisfacción
+    mostrarSatisfaccion(data.indice_satisfaccion);
+}
+
+function mostrarGraficos(graficos) {
+    const container = document.getElementById('contenedorGraficos');
+    container.innerHTML = '';
+    
+    const keys = Object.keys(graficos);
+    document.getElementById('badgeGraficos').textContent = keys.length;
+    
+    if (keys.length === 0) {
+        container.innerHTML = '<div class="col-12 text-center text-muted py-4">No se generaron gráficos</div>';
+        return;
+    }
+    
+    keys.forEach(key => {
+        const g = graficos[key];
+        const col = document.createElement('div');
+        col.className = 'col-md-6';
+        col.innerHTML = `
+            <div class="grafico-card">
+                <div class="grafico-titulo">
+                    <i class="bi bi-graph-up text-primary"></i> ${g.nombre}
+                </div>
+                <img src="data:image/png;base64,${g.base64}" 
+                     alt="${g.nombre}"
+                     onclick="abrirModalImagen('data:image/png;base64,${g.base64}', '${g.nombre}')">
+            </div>
+        `;
+        container.appendChild(col);
+    });
+}
+
+function mostrarEstadisticas(estadisticas) {
+    const tbody = document.getElementById('tbodyEstadisticas');
+    tbody.innerHTML = '';
+    
+    estadisticas.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><small>${(row.Pregunta || '').substring(0, 60)}</small></td>
+            <td>${row.Total_Respuestas || 0}</td>
+            <td>${row.Media ? '<span class="badge bg-primary">' + row.Media + '</span>' : '-'}</td>
+            <td>${row.Mediana || '-'}</td>
+            <td>${row.Moda || '-'}</td>
+            <td>${row.Desv_Est || '-'}</td>
+            <td>${row.Min || '-'}</td>
+            <td>${row.Max || '-'}</td>
+            <td>${row.Q1 || '-'}</td>
+            <td>${row.Q3 || '-'}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function mostrarFrecuencias(frecuencias) {
+    const tbody = document.getElementById('tbodyFrecuencias');
+    tbody.innerHTML = '';
+    
+    frecuencias.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><small>${(row.Pregunta || '').substring(0, 50)}</small></td>
+            <td>${row.Opcion}</td>
+            <td><strong>${row.Frecuencia}</strong></td>
+            <td>
+                <div class="d-flex align-items-center">
+                    <div class="progress flex-grow-1 me-2" style="height: 8px;">
+                        <div class="progress-bar" style="width: ${row.Porcentaje}%"></div>
+                    </div>
+                    <small>${row.Porcentaje}%</small>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function mostrarCorrelaciones(corr) {
+    const container = document.getElementById('contenedorCorrelaciones');
+    
+    if (!corr.pares_significativos || corr.pares_significativos.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-5">
+                <i class="bi bi-link-45deg" style="font-size: 4rem; color: #ccc;"></i>
+                <h4 class="mt-3 text-muted">No hay correlaciones significativas</h4>
+                <p class="text-muted">Se necesitan al menos 2 preguntas numéricas.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '<div class="card card-custom"><div class="card-body">';
+    corr.pares_significativos.forEach(par => {
+        const absR = Math.abs(par.Correlacion);
+        const clase = absR >= 0.7 ? 'fuerte' : (absR >= 0.5 ? 'moderada' : 'debil');
+        const badge = absR >= 0.7 ? 'bg-danger' : (absR >= 0.5 ? 'bg-warning text-dark' : 'bg-secondary');
+        
+        html += `
+            <div class="correlacion-item ${clase}">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>${(par.Pregunta_1 || '').substring(0, 50)}</strong>
+                        <i class="bi bi-arrow-left-right mx-2 text-muted"></i>
+                        <strong>${(par.Pregunta_2 || '').substring(0, 50)}</strong>
+                    </div>
+                    <span class="badge ${badge} fs-6">r = ${par.Correlacion}</span>
+                </div>
+                <small class="text-muted">${par.Interpretacion || ''}</small>
+            </div>
+        `;
+    });
+    html += '</div></div>';
+    container.innerHTML = html;
+}
+
+function mostrarGrupos(grupos) {
+    const container = document.getElementById('contenedorGrupos');
+    
+    if (!grupos.resumen || grupos.resumen.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-5">
+                <i class="bi bi-people" style="font-size: 4rem; color: #ccc;"></i>
+                <h4 class="mt-3 text-muted">No hay análisis por grupos</h4>
+                <p class="text-muted">Se necesita al menos una pregunta de opción única o Sí/No.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = `
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i>
+            <strong>Grupo:</strong> ${grupos.grupo_pregunta}
+        </div>
+        <div class="card card-custom"><div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Pregunta</th>
+                        <th>Grupo</th>
+                        <th>N</th>
+                        <th>Media</th>
+                        <th>Mediana</th>
+                        <th>Desv. Est.</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    
+    grupos.resumen.forEach(row => {
+        html += `
+            <tr>
+                <td><small>${(row.Pregunta || '').substring(0, 50)}</small></td>
+                <td><span class="badge bg-secondary">${row.Grupo}</span></td>
+                <td>${row.N}</td>
+                <td><strong>${row.Media}</strong></td>
+                <td>${row.Mediana}</td>
+                <td>${row.Desv_Est}</td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table></div></div></div>';
+    container.innerHTML = html;
+}
+
+function mostrarSatisfaccion(indice) {
+    const container = document.getElementById('contenedorSatisfaccion');
+    
+    if (!indice.indice_global) {
+        container.innerHTML = `
+            <div class="text-center py-5">
+                <i class="bi bi-star" style="font-size: 4rem; color: #ccc;"></i>
+                <h4 class="mt-3 text-muted">No hay índice de satisfacción</h4>
+                <p class="text-muted">Se necesitan preguntas de escala Likert.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const valor = indice.indice_global;
+    const color = valor >= 70 ? '#2ecc71' : (valor >= 50 ? '#f39c12' : '#e74c3c');
+    const badge = valor >= 70 ? 'bg-success' : (valor >= 50 ? 'bg-warning text-dark' : 'bg-danger');
+    const texto = valor >= 70 ? '✅ Satisfactorio' : (valor >= 50 ? '⚠️ Neutral' : '❌ Necesita Mejora');
+    
+    let html = `
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="card card-custom h-100">
+                    <div class="card-body text-center">
+                        <h6 class="text-muted mb-3">Índice Global</h6>
+                        <div class="indice-circular" style="--valor: ${valor}; --color-indice: ${color};">
+                            <div class="indice-circular-inner">
+                                <div class="indice-valor">${valor}</div>
+                                <div class="indice-max">/ 100</div>
+                            </div>
+                        </div>
+                        <p class="mt-3"><span class="badge ${badge} fs-6">${texto}</span></p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="card card-custom h-100">
+                    <div class="card-body">
+                        <h6 class="mb-3">Índice por Pregunta</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead class="table-dark">
+                                    <tr><th>Pregunta</th><th>Índice</th><th>Min</th><th>Max</th></tr>
+                                </thead>
+                                <tbody>
+    `;
+    
+    (indice.por_pregunta || []).forEach(row => {
+        const colorBar = row.Indice_Promedio >= 70 ? 'bg-success' : (row.Indice_Promedio >= 50 ? 'bg-warning' : 'bg-danger');
+        html += `
+            <tr>
+                <td><small>${(row.Pregunta || '').substring(0, 55)}</small></td>
+                <td>
+                    <div class="d-flex align-items-center">
+                        <div class="progress flex-grow-1 me-2" style="height: 8px;">
+                            <div class="progress-bar ${colorBar}" style="width: ${row.Indice_Promedio}%"></div>
+                        </div>
+                        <strong>${row.Indice_Promedio}</strong>
+                    </div>
+                </td>
+                <td>${row.Min}</td>
+                <td>${row.Max}</td>
+            </tr>
+        `;
+    });
+    
+    html += '</tbody></table></div></div></div></div></div>';
+    container.innerHTML = html;
+}
+
+function reiniciarAnalisisCuanti() {
+    document.getElementById('resultadosCuanti').classList.remove('show');
+    document.getElementById('cardCarga').style.display = 'block';
+    document.getElementById('archivoCuanti').value = '';
+    document.getElementById('fileInfoCuanti').style.display = 'none';
+    document.getElementById('btnAnalizarCuanti').disabled = true;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function abrirModalImagen(src, titulo) {
+    document.getElementById('modalImagenImg').src = src;
+    document.getElementById('modalImagenTitulo').textContent = titulo;
+    new bootstrap.Modal(document.getElementById('modalImagen')).show();
+}
+</script>
+{% endblock %}

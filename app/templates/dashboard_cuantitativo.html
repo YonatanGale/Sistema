@@ -1,0 +1,693 @@
+{% extends "base.html" %}
+
+{% block title %}Análisis Cuantitativo - {{ encuesta.titulo }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .kpi-card {
+        border-radius: 12px;
+        padding: 20px;
+        color: white;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+    }
+    .kpi-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    .kpi-card .kpi-value {
+        font-size: 2.5rem;
+        font-weight: 700;
+        line-height: 1;
+    }
+    .kpi-card .kpi-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+        margin-top: 5px;
+    }
+    .kpi-card .kpi-icon {
+        font-size: 3rem;
+        opacity: 0.3;
+        position: absolute;
+        right: 15px;
+        top: 15px;
+    }
+    .kpi-primary { background: linear-gradient(135deg, #3498db, #2980b9); }
+    .kpi-success { background: linear-gradient(135deg, #2ecc71, #27ae60); }
+    .kpi-warning { background: linear-gradient(135deg, #f39c12, #e67e22); }
+    .kpi-danger  { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+    .kpi-info    { background: linear-gradient(135deg, #9b59b6, #8e44ad); }
+    
+    .grafico-card {
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        transition: all 0.3s ease;
+        background: white;
+    }
+    .grafico-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    .grafico-card img {
+        width: 100%;
+        height: auto;
+        cursor: pointer;
+    }
+    .grafico-card .grafico-titulo {
+        padding: 12px 15px;
+        background: #f8f9fa;
+        border-bottom: 1px solid #e9ecef;
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: #2c3e50;
+    }
+    
+    .indice-circular {
+        width: 180px;
+        height: 180px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto;
+        position: relative;
+        background: conic-gradient(
+            var(--color-indice) 0deg,
+            var(--color-indice) calc(var(--valor) * 3.6deg),
+            #ecf0f1 calc(var(--valor) * 3.6deg),
+            #ecf0f1 360deg
+        );
+    }
+    .indice-circular-inner {
+        width: 140px;
+        height: 140px;
+        border-radius: 50%;
+        background: white;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    .indice-circular .indice-valor {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #2c3e50;
+    }
+    .indice-circular .indice-max {
+        font-size: 0.85rem;
+        color: #7f8c8d;
+    }
+    
+    .correlacion-item {
+        padding: 10px 15px;
+        border-left: 4px solid #3498db;
+        background: #f8f9fa;
+        border-radius: 6px;
+        margin-bottom: 8px;
+    }
+    .correlacion-item.fuerte { border-left-color: #e74c3c; }
+    .correlacion-item.moderada { border-left-color: #f39c12; }
+    .correlacion-item.debil { border-left-color: #95a5a6; }
+    
+    .modal-imagen .modal-body {
+        text-align: center;
+        background: #2c3e50;
+        padding: 10px;
+    }
+    .modal-imagen .modal-body img {
+        max-width: 100%;
+        max-height: 85vh;
+    }
+    
+    .nav-pills .nav-link {
+        color: #495057;
+        border-radius: 8px;
+        padding: 10px 20px;
+        font-weight: 500;
+    }
+    .nav-pills .nav-link.active {
+        background: linear-gradient(135deg, #3498db, #2980b9);
+        color: white;
+    }
+    
+    .badge-significativo {
+        font-size: 0.75rem;
+        padding: 3px 8px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    
+    <!-- ============================================ -->
+    <!-- HEADER -->
+    <!-- ============================================ -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap">
+        <div>
+            <h1 class="mb-1">
+                <i class="bi bi-graph-up-arrow text-primary"></i> 
+                Análisis Cuantitativo
+            </h1>
+            <p class="text-muted mb-0">
+                {{ encuesta.titulo }}
+                {% if fecha_analisis %}
+                    <small class="ms-2">
+                        <i class="bi bi-clock-history"></i> 
+                        {{ fecha_analisis[:19].replace('T', ' ') }}
+                    </small>
+                {% endif %}
+            </p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{{ url_for('respuestas.ver_respuestas', encuesta_id=encuesta.id) }}" 
+               class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Volver a Respuestas
+            </a>
+            <a href="{{ url_for('cuantitativo.analizar_cuantitativo', encuesta_id=encuesta.id) }}" 
+               class="btn btn-custom btn-custom-primary">
+                <i class="bi bi-arrow-clockwise"></i> Re-analizar
+            </a>
+            {% if excel_disponible %}
+            <a href="{{ url_for('cuantitativo.descargar_analisis_excel', encuesta_id=encuesta.id) }}" 
+               class="btn btn-custom btn-custom-success">
+                <i class="bi bi-file-earmark-excel"></i> Descargar Excel
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- KPIs PRINCIPALES -->
+    <!-- ============================================ -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="kpi-card kpi-primary position-relative">
+                <i class="bi bi-people-fill kpi-icon"></i>
+                <div class="kpi-value">{{ metadata.total_encuestados }}</div>
+                <div class="kpi-label">Encuestados</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="kpi-card kpi-info position-relative">
+                <i class="bi bi-question-circle-fill kpi-icon"></i>
+                <div class="kpi-value">{{ metadata.preguntas|length }}</div>
+                <div class="kpi-label">Preguntas analizadas</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="kpi-card kpi-success position-relative">
+                <i class="bi bi-star-fill kpi-icon"></i>
+                <div class="kpi-value">
+                    {% if resultados.indice_satisfaccion and resultados.indice_satisfaccion.indice_global %}
+                        {{ resultados.indice_satisfaccion.indice_global }}
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </div>
+                <div class="kpi-label">Índice de satisfacción</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="kpi-card kpi-warning position-relative">
+                <i class="bi bi-diagram-3-fill kpi-icon"></i>
+                <div class="kpi-value">
+                    {% if resultados.correlaciones and resultados.correlaciones.pares_significativos %}
+                        {{ resultados.correlaciones.pares_significativos|length }}
+                    {% else %}
+                        0
+                    {% endif %}
+                </div>
+                <div class="kpi-label">Correlaciones significativas</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- PESTAÑAS -->
+    <!-- ============================================ -->
+    <ul class="nav nav-pills mb-4" id="pills-tab" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="pills-resumen-tab" data-bs-toggle="pill" 
+                    data-bs-target="#pills-resumen" type="button" role="tab">
+                <i class="bi bi-clipboard-data"></i> Resumen
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="pills-estadisticas-tab" data-bs-toggle="pill" 
+                    data-bs-target="#pills-estadisticas" type="button" role="tab">
+                <i class="bi bi-calculator"></i> Estadísticas
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="pills-graficos-tab" data-bs-toggle="pill" 
+                    data-bs-target="#pills-graficos" type="button" role="tab">
+                <i class="bi bi-bar-chart-line"></i> Gráficos
+                <span class="badge bg-primary ms-1">{{ graficos|length }}</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="pills-correlaciones-tab" data-bs-toggle="pill" 
+                    data-bs-target="#pills-correlaciones" type="button" role="tab">
+                <i class="bi bi-link-45deg"></i> Correlaciones
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="pills-grupos-tab" data-bs-toggle="pill" 
+                    data-bs-target="#pills-grupos" type="button" role="tab">
+                <i class="bi bi-people"></i> Grupos
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="pills-satisfaccion-tab" data-bs-toggle="pill" 
+                    data-bs-target="#pills-satisfaccion" type="button" role="tab">
+                <i class="bi bi-star"></i> Satisfacción
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="pills-tabContent">
+        
+        <!-- ============================================ -->
+        <!-- TAB: RESUMEN -->
+        <!-- ============================================ -->
+        <div class="tab-pane fade show active" id="pills-resumen" role="tabpanel">
+            <div class="card card-custom">
+                <div class="card-body">
+                    <h5 class="mb-3"><i class="bi bi-info-circle text-primary"></i> Información de la Encuesta</h5>
+                    <table class="table table-sm">
+                        <tr>
+                            <td width="200"><strong>Título:</strong></td>
+                            <td>{{ metadata.titulo }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Descripción:</strong></td>
+                            <td>{{ metadata.descripcion or 'Sin descripción' }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Total encuestados:</strong></td>
+                            <td>{{ metadata.total_encuestados }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Preguntas analizadas:</strong></td>
+                            <td>{{ metadata.preguntas|length }}</td>
+                        </tr>
+                    </table>
+                    
+                    <h5 class="mb-3 mt-4"><i class="bi bi-list-check text-primary"></i> Preguntas Analizadas</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Pregunta</th>
+                                    <th>Tipo</th>
+                                    <th>Opciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in metadata.preguntas %}
+                                <tr>
+                                    <td><span class="badge bg-primary">P{{ p.id }}</span></td>
+                                    <td>{{ p.texto }}</td>
+                                    <td>
+                                        {% if p.tipo == 'escala_likert' %}
+                                            <span class="badge bg-info">Likert</span>
+                                        {% elif p.tipo == 'opcion_unica' %}
+                                            <span class="badge bg-secondary">Única</span>
+                                        {% elif p.tipo == 'opcion_multiple' %}
+                                            <span class="badge bg-warning text-dark">Múltiple</span>
+                                        {% elif p.tipo == 'seleccion_si_no' %}
+                                            <span class="badge bg-success">Sí/No</span>
+                                        {% else %}
+                                            <span class="badge bg-dark">{{ p.tipo }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td><small>{{ p.opciones|length }}</small></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================ -->
+        <!-- TAB: ESTADÍSTICAS -->
+        <!-- ============================================ -->
+        <div class="tab-pane fade" id="pills-estadisticas" role="tabpanel">
+            <div class="card card-custom">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-calculator text-primary"></i> Estadísticas Descriptivas</h5>
+                </div>
+                <div class="card-body">
+                    {% if resultados.estadisticas_descriptivas and resultados.estadisticas_descriptivas|length > 0 %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Pregunta</th>
+                                    <th>Tipo</th>
+                                    <th>N</th>
+                                    <th>Media</th>
+                                    <th>Mediana</th>
+                                    <th>Moda</th>
+                                    <th>Desv. Est.</th>
+                                    <th>Min</th>
+                                    <th>Max</th>
+                                    <th>Q1</th>
+                                    <th>Q3</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in resultados.estadisticas_descriptivas %}
+                                <tr>
+                                    <td><small>{{ row.Pregunta[:60] }}{% if row.Pregunta|length > 60 %}...{% endif %}</small></td>
+                                    <td><small>{{ row.Tipo }}</small></td>
+                                    <td>{{ row.Total_Respuestas }}</td>
+                                    <td>
+                                        {% if row.Media %}
+                                            <span class="badge bg-primary">{{ row.Media }}</span>
+                                        {% else %}-{% endif %}
+                                    </td>
+                                    <td>{{ row.Mediana or '-' }}</td>
+                                    <td>{{ row.Moda or '-' }}</td>
+                                    <td>{{ row.Desv_Est or '-' }}</td>
+                                    <td>{{ row.Min or '-' }}</td>
+                                    <td>{{ row.Max or '-' }}</td>
+                                    <td>{{ row.Q1 or '-' }}</td>
+                                    <td>{{ row.Q3 or '-' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No hay estadísticas descriptivas disponibles.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Frecuencias -->
+            <div class="card card-custom mt-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-list-ol text-primary"></i> Frecuencias por Opción</h5>
+                </div>
+                <div class="card-body">
+                    {% if resultados.frecuencias and resultados.frecuencias|length > 0 %}
+                    <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                        <table class="table table-sm table-hover">
+                            <thead class="table-dark sticky-top">
+                                <tr>
+                                    <th>Pregunta</th>
+                                    <th>Opción</th>
+                                    <th>Frecuencia</th>
+                                    <th>Porcentaje</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in resultados.frecuencias %}
+                                <tr>
+                                    <td><small>{{ row.Pregunta[:50] }}{% if row.Pregunta|length > 50 %}...{% endif %}</small></td>
+                                    <td>{{ row.Opcion }}</td>
+                                    <td><strong>{{ row.Frecuencia }}</strong></td>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="progress flex-grow-1 me-2" style="height: 8px;">
+                                                <div class="progress-bar" style="width: {{ row.Porcentaje }}%"></div>
+                                            </div>
+                                            <small>{{ row.Porcentaje }}%</small>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No hay frecuencias disponibles.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================ -->
+        <!-- TAB: GRÁFICOS -->
+        <!-- ============================================ -->
+        <div class="tab-pane fade" id="pills-graficos" role="tabpanel">
+            {% if graficos %}
+            <div class="row g-3">
+                {% for grafico in graficos %}
+                <div class="col-md-6">
+                    <div class="grafico-card">
+                        <div class="grafico-titulo">
+                            <i class="bi bi-graph-up text-primary"></i>
+                            {{ grafico.nombre }}
+                        </div>
+                        <img src="{{ url_for('cuantitativo.servir_grafico', encuesta_id=encuesta.id, nombre_archivo=grafico.archivo) }}" 
+                             alt="{{ grafico.nombre }}"
+                             onclick="abrirModalImagen('{{ url_for('cuantitativo.servir_grafico', encuesta_id=encuesta.id, nombre_archivo=grafico.archivo) }}', '{{ grafico.nombre }}')">
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-bar-chart" style="font-size: 4rem; color: #ccc;"></i>
+                <h4 class="mt-3 text-muted">No hay gráficos generados</h4>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- ============================================ -->
+        <!-- TAB: CORRELACIONES -->
+        <!-- ============================================ -->
+        <div class="tab-pane fade" id="pills-correlaciones" role="tabpanel">
+            {% if resultados.correlaciones and resultados.correlaciones.pares_significativos and resultados.correlaciones.pares_significativos|length > 0 %}
+            
+            <div class="card card-custom">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">
+                        <i class="bi bi-link-45deg text-primary"></i> 
+                        Pares con Correlación Significativa (|r| ≥ 0.3)
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% for par in resultados.correlaciones.pares_significativos %}
+                    {% set abs_r = par.Correlacion|abs %}
+                    <div class="correlacion-item {% if abs_r >= 0.7 %}fuerte{% elif abs_r >= 0.5 %}moderada{% else %}debil{% endif %}">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>{{ par.Pregunta_1[:50] }}</strong>
+                                <i class="bi bi-arrow-left-right mx-2 text-muted"></i>
+                                <strong>{{ par.Pregunta_2[:50] }}</strong>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge {% if abs_r >= 0.7 %}bg-danger{% elif abs_r >= 0.5 %}bg-warning text-dark{% else %}bg-secondary{% endif %} fs-6">
+                                    r = {{ par.Correlacion }}
+                                </span>
+                            </div>
+                        </div>
+                        <small class="text-muted">
+                            {{ par.Interpretacion }}
+                            {% if par.P_Value is not none %}
+                                | p = {{ par.P_Value }}
+                                {% if par.P_Value < 0.05 %}
+                                    <span class="badge bg-success badge-significativo ms-1">Significativa</span>
+                                {% endif %}
+                            {% endif %}
+                        </small>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-link-45deg" style="font-size: 4rem; color: #ccc;"></i>
+                <h4 class="mt-3 text-muted">No hay correlaciones significativas</h4>
+                <p class="text-muted">Se necesitan al menos 2 preguntas numéricas con datos suficientes.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- ============================================ -->
+        <!-- TAB: GRUPOS -->
+        <!-- ============================================ -->
+        <div class="tab-pane fade" id="pills-grupos" role="tabpanel">
+            {% if resultados.grupos and resultados.grupos.resumen and resultados.grupos.resumen|length > 0 %}
+            
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i>
+                <strong>Grupo de comparación:</strong>
+                {{ resultados.grupos.grupo_pregunta }}
+            </div>
+            
+            <div class="card card-custom">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="bi bi-bar-chart text-primary"></i> Comparación por Grupo</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Pregunta</th>
+                                    <th>Grupo</th>
+                                    <th>N</th>
+                                    <th>Media</th>
+                                    <th>Mediana</th>
+                                    <th>Desv. Est.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in resultados.grupos.resumen %}
+                                <tr>
+                                    <td><small>{{ row.Pregunta[:50] }}</small></td>
+                                    <td><span class="badge bg-secondary">{{ row.Grupo }}</span></td>
+                                    <td>{{ row.N }}</td>
+                                    <td><strong>{{ row.Media }}</strong></td>
+                                    <td>{{ row.Mediana }}</td>
+                                    <td>{{ row.Desv_Est }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-people" style="font-size: 4rem; color: #ccc;"></i>
+                <h4 class="mt-3 text-muted">No hay análisis por grupos disponible</h4>
+                <p class="text-muted">Se necesita al menos una pregunta de opción única o Sí/No.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- ============================================ -->
+        <!-- TAB: SATISFACCIÓN -->
+        <!-- ============================================ -->
+        <div class="tab-pane fade" id="pills-satisfaccion" role="tabpanel">
+            {% if resultados.indice_satisfaccion and resultados.indice_satisfaccion.indice_global %}
+            
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card card-custom h-100">
+                        <div class="card-body text-center d-flex flex-column justify-content-center">
+                            <h6 class="text-muted mb-3">Índice de Satisfacción Global</h6>
+                            {% set indice = resultados.indice_satisfaccion.indice_global %}
+                            {% if indice >= 70 %}
+                                {% set color = '#2ecc71' %}
+                            {% elif indice >= 50 %}
+                                {% set color = '#f39c12' %}
+                            {% else %}
+                                {% set color = '#e74c3c' %}
+                            {% endif %}
+                            <div class="indice-circular" style="--valor: {{ indice }}; --color-indice: {{ color }};">
+                                <div class="indice-circular-inner">
+                                    <div class="indice-valor">{{ indice }}</div>
+                                    <div class="indice-max">/ 100</div>
+                                </div>
+                            </div>
+                            <p class="mt-3 mb-0">
+                                {% if indice >= 70 %}
+                                    <span class="badge bg-success fs-6">✅ Satisfactorio</span>
+                                {% elif indice >= 50 %}
+                                    <span class="badge bg-warning text-dark fs-6">⚠️ Neutral</span>
+                                {% else %}
+                                    <span class="badge bg-danger fs-6">❌ Necesita Mejora</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-8">
+                    <div class="card card-custom h-100">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0"><i class="bi bi-list-ol text-primary"></i> Índice por Pregunta</h5>
+                        </div>
+                        <div class="card-body">
+                            {% if resultados.indice_satisfaccion.por_pregunta %}
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th>Pregunta</th>
+                                            <th>Índice</th>
+                                            <th>Min</th>
+                                            <th>Max</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for row in resultados.indice_satisfaccion.por_pregunta %}
+                                        <tr>
+                                            <td><small>{{ row.Pregunta[:55] }}</small></td>
+                                            <td>
+                                                <div class="d-flex align-items-center">
+                                                    <div class="progress flex-grow-1 me-2" style="height: 8px;">
+                                                        <div class="progress-bar 
+                                                            {% if row.Indice_Promedio >= 70 %}bg-success
+                                                            {% elif row.Indice_Promedio >= 50 %}bg-warning
+                                                            {% else %}bg-danger{% endif %}" 
+                                                            style="width: {{ row.Indice_Promedio }}%"></div>
+                                                    </div>
+                                                    <strong>{{ row.Indice_Promedio }}</strong>
+                                                </div>
+                                            </td>
+                                            <td>{{ row.Min }}</td>
+                                            <td>{{ row.Max }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-star" style="font-size: 4rem; color: #ccc;"></i>
+                <h4 class="mt-3 text-muted">No hay índice de satisfacción disponible</h4>
+                <p class="text-muted">Se necesitan preguntas de tipo escala Likert.</p>
+            </div>
+            {% endif %}
+        </div>
+        
+    </div>
+</div>
+
+<!-- ============================================ -->
+<!-- MODAL PARA VER GRÁFICO AMPLIADO -->
+<!-- ============================================ -->
+<div class="modal fade modal-imagen" id="modalImagen" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title" id="modalImagenTitulo">Gráfico</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <img id="modalImagenImg" src="" alt="Gráfico">
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function abrirModalImagen(src, titulo) {
+    document.getElementById('modalImagenImg').src = src;
+    document.getElementById('modalImagenTitulo').textContent = titulo;
+    const modal = new bootstrap.Modal(document.getElementById('modalImagen'));
+    modal.show();
+}
+</script>
+
+{% endblock %}

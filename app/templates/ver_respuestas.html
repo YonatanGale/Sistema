@@ -46,6 +46,13 @@
                             <small class="text-muted d-block">Formato para análisis cualitativo</small>
                         </a>
                     </li>
+                    <li>
+                        <a class="dropdown-item text-success fw-bold" 
+                           href="{{ url_for('respuestas.exportar_cuantitativo_csv', encuesta_id=encuesta.id) }}">
+                            <i class="bi bi-filetype-csv"></i> Exportar CSV Cuantitativo
+                            <small class="text-muted d-block">Para análisis estadístico</small>
+                        </a>
+                    </li>
                 </ul>
             </div>
 
