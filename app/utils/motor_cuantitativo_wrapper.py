@@ -2,6 +2,7 @@
 """
 Wrapper para ejecutar el motor cuantitativo desde Flask.
 Convierte todos los valores NaN a None para que el JSON sea válido.
+Auto-limpieza: elimina análisis anteriores antes de ejecutar uno nuevo.
 """
 
 import os
@@ -9,6 +10,7 @@ import sys
 import json
 import base64
 import math
+import shutil
 import logging
 from datetime import datetime
 from io import BytesIO
@@ -26,13 +28,79 @@ if MOTOR_DIR not in sys.path:
     sys.path.insert(0, MOTOR_DIR)
 
 
+# ============================================
+# AUTO-LIMPIEZA DE ANÁLISIS ANTERIORES
+# ============================================
+
+def _limpiar_analisis_anteriores(directorio_padre):
+    """
+    Elimina TODOS los análisis anteriores en el directorio padre.
+    Solo mantiene el análisis más reciente.
+    
+    Args:
+        directorio_padre: ruta a motor_cuantitativo/data/resultados/
+    """
+    if not os.path.exists(directorio_padre):
+        logger.info(f"📁 Directorio no existe aún: {directorio_padre}")
+        return
+    
+    try:
+        # Listar solo carpetas que empiecen con 'motor_' o 'encuesta_'
+        carpetas_analisis = [
+            d for d in os.listdir(directorio_padre)
+            if (d.startswith('motor_') or d.startswith('encuesta_'))
+            and os.path.isdir(os.path.join(directorio_padre, d))
+        ]
+        
+        if not carpetas_analisis:
+            logger.info("🧹 No hay análisis anteriores que limpiar")
+            return
+        
+        logger.info(f"🧹 Limpiando {len(carpetas_analisis)} análisis anteriores...")
+        
+        for carpeta in carpetas_analisis:
+            ruta = os.path.join(directorio_padre, carpeta)
+            try:
+                shutil.rmtree(ruta)
+                logger.info(f"  🗑️ Eliminado: {carpeta}")
+            except Exception as e:
+                logger.warning(f"  ⚠️ No se pudo eliminar {carpeta}: {e}")
+        
+        logger.info(f"✅ Limpieza completada")
+        
+    except Exception as e:
+        logger.error(f"❌ Error en limpieza: {e}")
+
+
+def _limpiar_temporales(directorio_temp):
+    """
+    Elimina archivos temporales del directorio temp.
+    """
+    if not os.path.exists(directorio_temp):
+        return
+    
+    try:
+        for archivo in os.listdir(directorio_temp):
+            ruta = os.path.join(directorio_temp, archivo)
+            if os.path.isfile(ruta) and not archivo.startswith('.gitkeep'):
+                try:
+                    os.remove(ruta)
+                except Exception as e:
+                    logger.warning(f"No se pudo eliminar temporal {archivo}: {e}")
+    except Exception as e:
+        logger.warning(f"Error limpiando temporales: {e}")
+
+
+# ============================================
+# SERIALIZACIÓN JSON SEGURA
+# ============================================
+
 def _es_nan(valor):
     """Detecta si un valor es NaN/NaT/None de forma segura."""
     if valor is None:
         return True
     try:
         resultado = pd.isna(valor)
-        # pd.isna() puede devolver array, verificar
         if isinstance(resultado, (bool, np.bool_)):
             return bool(resultado)
         return False
@@ -42,15 +110,12 @@ def _es_nan(valor):
 
 def _limpiar_valor(valor):
     """Convierte cualquier valor a un tipo serializable en JSON."""
-    # Primero manejar None/NaN/NaT
     if _es_nan(valor):
         return None
     
-    # Tipos numpy
     if isinstance(valor, (np.integer,)):
         return int(valor)
     if isinstance(valor, (np.floating,)):
-        # Verificar que no sea NaN/Inf
         f = float(valor)
         if math.isnan(f) or math.isinf(f):
             return None
@@ -60,17 +125,14 @@ def _limpiar_valor(valor):
     if isinstance(valor, np.ndarray):
         return [_limpiar_valor(x) for x in valor.tolist()]
     
-    # Tipos pandas
     if isinstance(valor, pd.Timestamp):
         return valor.isoformat()
     
-    # Floats nativos
     if isinstance(valor, float):
         if math.isnan(valor) or math.isinf(valor):
             return None
         return valor
     
-    # Strings, ints, etc.
     return valor
 
 
@@ -95,6 +157,10 @@ def _codificar_imagen_base64(ruta_png):
         return base64.b64encode(f.read()).decode('utf-8')
 
 
+# ============================================
+# FUNCIÓN PRINCIPAL
+# ============================================
+
 def analizar_con_motor_cuantitativo(archivo):
     """
     Ejecuta el análisis cuantitativo sobre el archivo CSV subido.
@@ -112,23 +178,39 @@ def analizar_con_motor_cuantitativo(archivo):
         return {'success': False, 'message': f'Error al cargar el motor: {str(e)}'}
     
     # ============================================
-    # 1. GUARDAR ARCHIVO TEMPORAL
+    # 1. AUTO-LIMPIEZA DE ANÁLISIS ANTERIORES
     # ============================================
-    temp_dir = os.path.join(BASE_DIR, 'motor_cuantitativo', 'data', 'temp')
-    os.makedirs(temp_dir, exist_ok=True)
+    directorio_padre = os.path.join(
+        BASE_DIR, 'motor_cuantitativo', 'data', 'resultados'
+    )
+    directorio_temp = os.path.join(
+        BASE_DIR, 'motor_cuantitativo', 'data', 'temp'
+    )
+    
+    logger.info("=" * 60)
+    logger.info("🧹 Auto-limpieza de análisis anteriores...")
+    logger.info("=" * 60)
+    
+    _limpiar_analisis_anteriores(directorio_padre)
+    _limpiar_temporales(directorio_temp)
+    
+    # ============================================
+    # 2. GUARDAR ARCHIVO TEMPORAL
+    # ============================================
+    os.makedirs(directorio_temp, exist_ok=True)
     
     nombre_original = archivo.filename
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     nombre_temp = f"temp_{timestamp}_{nombre_original}"
-    ruta_temp = os.path.join(temp_dir, nombre_temp)
+    ruta_temp = os.path.join(directorio_temp, nombre_temp)
     
     archivo.save(ruta_temp)
     
     # ============================================
-    # 2. EJECUTAR ANÁLISIS
+    # 3. EJECUTAR ANÁLISIS
     # ============================================
     directorio_resultados = os.path.join(
-        BASE_DIR, 'motor_cuantitativo', 'data', 'resultados', f'motor_{timestamp}'
+        directorio_padre, f'motor_{timestamp}'
     )
     os.makedirs(directorio_resultados, exist_ok=True)
     
@@ -154,31 +236,25 @@ def analizar_con_motor_cuantitativo(archivo):
             pass
     
     # ============================================
-    # 3. PREPARAR RESPUESTA JSON
+    # 4. PREPARAR RESPUESTA JSON
     # ============================================
     metadata = resultados['metadata']
     
-    # Estadísticas descriptivas (con NaN → None)
     estadisticas = _df_a_lista(resultados.get('estadisticas_descriptivas'))
-    
-    # Frecuencias
     frecuencias = _df_a_lista(resultados.get('frecuencias'))
     
-    # Correlaciones
     correlaciones_raw = resultados.get('correlaciones', {})
     correlaciones = {
         'matriz': _df_a_lista(correlaciones_raw.get('matriz')),
         'pares_significativos': _df_a_lista(correlaciones_raw.get('pares_significativos'))
     }
     
-    # Grupos
     grupos_raw = resultados.get('grupos', {})
     grupos = {
         'grupo_pregunta': grupos_raw.get('grupo_pregunta'),
         'resumen': _df_a_lista(grupos_raw.get('resumen'))
     }
     
-    # Índice de satisfacción
     indice_raw = resultados.get('indice_satisfaccion', {})
     indice = {
         'indice_global': _limpiar_valor(indice_raw.get('indice_global')),
@@ -186,7 +262,7 @@ def analizar_con_motor_cuantitativo(archivo):
     }
     
     # ============================================
-    # 4. GRÁFICOS COMO BASE64
+    # 5. GRÁFICOS COMO BASE64
     # ============================================
     graficos = {}
     archivos_graficos = resultados.get('archivos', {}).get('graficos', {})
@@ -201,7 +277,7 @@ def analizar_con_motor_cuantitativo(archivo):
             }
     
     # ============================================
-    # 5. GUARDAR RESULTADOS PARA PDF/EXCEL
+    # 6. GUARDAR RUTAS PARA PDF/EXCEL
     # ============================================
     archivo_excel = resultados.get('archivos', {}).get('excel')
     archivo_json = resultados.get('archivos', {}).get('json')
@@ -216,8 +292,10 @@ def analizar_con_motor_cuantitativo(archivo):
     with open(os.path.join(directorio_resultados, '_rutas.json'), 'w') as f:
         json.dump(rutas_meta, f)
     
+    logger.info(f"✅ Análisis guardado en: {directorio_resultados}")
+    
     # ============================================
-    # 6. RESPUESTA FINAL
+    # 7. RESPUESTA FINAL
     # ============================================
     return {
         'success': True,
