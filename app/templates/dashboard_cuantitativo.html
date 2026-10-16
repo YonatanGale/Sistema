@@ -37,7 +37,7 @@
     .kpi-warning { background: linear-gradient(135deg, #f39c12, #e67e22); }
     .kpi-danger  { background: linear-gradient(135deg, #e74c3c, #c0392b); }
     .kpi-info    { background: linear-gradient(135deg, #9b59b6, #8e44ad); }
-    
+
     .grafico-card {
         border-radius: 12px;
         overflow: hidden;
@@ -62,7 +62,17 @@
         font-size: 0.9rem;
         color: #2c3e50;
     }
-    
+
+    /* ✅ NUEVO: wrapper para Plotly interactivo */
+    .plotly-wrapper {
+        width: 100%;
+        overflow: hidden;
+        padding: 6px;
+    }
+    .plotly-wrapper .plotly-graph-div {
+        width: 100% !important;
+    }
+
     .indice-circular {
         width: 180px;
         height: 180px;
@@ -98,7 +108,7 @@
         font-size: 0.85rem;
         color: #7f8c8d;
     }
-    
+
     .correlacion-item {
         padding: 10px 15px;
         border-left: 4px solid #3498db;
@@ -109,7 +119,7 @@
     .correlacion-item.fuerte { border-left-color: #e74c3c; }
     .correlacion-item.moderada { border-left-color: #f39c12; }
     .correlacion-item.debil { border-left-color: #95a5a6; }
-    
+
     .modal-imagen .modal-body {
         text-align: center;
         background: #2c3e50;
@@ -119,7 +129,7 @@
         max-width: 100%;
         max-height: 85vh;
     }
-    
+
     .nav-pills .nav-link {
         color: #495057;
         border-radius: 8px;
@@ -130,47 +140,59 @@
         background: linear-gradient(135deg, #3498db, #2980b9);
         color: white;
     }
-    
+
     .badge-significativo {
         font-size: 0.75rem;
         padding: 3px 8px;
+    }
+
+    /* ✅ NUEVO: aviso de preguntas sin datos */
+    .aviso-sin-datos {
+        background: #fff9e6;
+        border: 2px dashed #f39c12;
+        border-radius: 10px;
+        padding: 15px 20px;
+        margin-bottom: 16px;
+    }
+    .aviso-sin-datos i {
+        color: #f39c12;
     }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="fade-in">
-    
+
     <!-- ============================================ -->
     <!-- HEADER -->
     <!-- ============================================ -->
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap">
         <div>
             <h1 class="mb-1">
-                <i class="bi bi-graph-up-arrow text-primary"></i> 
+                <i class="bi bi-graph-up-arrow text-primary"></i>
                 Análisis Cuantitativo
             </h1>
             <p class="text-muted mb-0">
                 {{ encuesta.titulo }}
                 {% if fecha_analisis %}
                     <small class="ms-2">
-                        <i class="bi bi-clock-history"></i> 
+                        <i class="bi bi-clock-history"></i>
                         {{ fecha_analisis[:19].replace('T', ' ') }}
                     </small>
                 {% endif %}
             </p>
         </div>
         <div class="d-flex gap-2 flex-wrap">
-            <a href="{{ url_for('respuestas.ver_respuestas', encuesta_id=encuesta.id) }}" 
+            <a href="{{ url_for('respuestas.ver_respuestas', encuesta_id=encuesta.id) }}"
                class="btn btn-outline-secondary">
                 <i class="bi bi-arrow-left"></i> Volver a Respuestas
             </a>
-            <a href="{{ url_for('cuantitativo.analizar_cuantitativo', encuesta_id=encuesta.id) }}" 
+            <a href="{{ url_for('cuantitativo.analizar_cuantitativo', encuesta_id=encuesta.id) }}"
                class="btn btn-custom btn-custom-primary">
                 <i class="bi bi-arrow-clockwise"></i> Re-analizar
             </a>
             {% if excel_disponible %}
-            <a href="{{ url_for('cuantitativo.descargar_analisis_excel', encuesta_id=encuesta.id) }}" 
+            <a href="{{ url_for('cuantitativo.descargar_analisis_excel', encuesta_id=encuesta.id) }}"
                class="btn btn-custom btn-custom-success">
                 <i class="bi bi-file-earmark-excel"></i> Descargar Excel
             </a>
@@ -229,38 +251,38 @@
     <!-- ============================================ -->
     <ul class="nav nav-pills mb-4" id="pills-tab" role="tablist">
         <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="pills-resumen-tab" data-bs-toggle="pill" 
+            <button class="nav-link active" id="pills-resumen-tab" data-bs-toggle="pill"
                     data-bs-target="#pills-resumen" type="button" role="tab">
                 <i class="bi bi-clipboard-data"></i> Resumen
             </button>
         </li>
         <li class="nav-item" role="presentation">
-            <button class="nav-link" id="pills-estadisticas-tab" data-bs-toggle="pill" 
+            <button class="nav-link" id="pills-estadisticas-tab" data-bs-toggle="pill"
                     data-bs-target="#pills-estadisticas" type="button" role="tab">
                 <i class="bi bi-calculator"></i> Estadísticas
             </button>
         </li>
         <li class="nav-item" role="presentation">
-            <button class="nav-link" id="pills-graficos-tab" data-bs-toggle="pill" 
+            <button class="nav-link" id="pills-graficos-tab" data-bs-toggle="pill"
                     data-bs-target="#pills-graficos" type="button" role="tab">
                 <i class="bi bi-bar-chart-line"></i> Gráficos
                 <span class="badge bg-primary ms-1">{{ graficos|length }}</span>
             </button>
         </li>
         <li class="nav-item" role="presentation">
-            <button class="nav-link" id="pills-correlaciones-tab" data-bs-toggle="pill" 
+            <button class="nav-link" id="pills-correlaciones-tab" data-bs-toggle="pill"
                     data-bs-target="#pills-correlaciones" type="button" role="tab">
                 <i class="bi bi-link-45deg"></i> Correlaciones
             </button>
         </li>
         <li class="nav-item" role="presentation">
-            <button class="nav-link" id="pills-grupos-tab" data-bs-toggle="pill" 
+            <button class="nav-link" id="pills-grupos-tab" data-bs-toggle="pill"
                     data-bs-target="#pills-grupos" type="button" role="tab">
                 <i class="bi bi-people"></i> Grupos
             </button>
         </li>
         <li class="nav-item" role="presentation">
-            <button class="nav-link" id="pills-satisfaccion-tab" data-bs-toggle="pill" 
+            <button class="nav-link" id="pills-satisfaccion-tab" data-bs-toggle="pill"
                     data-bs-target="#pills-satisfaccion" type="button" role="tab">
                 <i class="bi bi-star"></i> Satisfacción
             </button>
@@ -268,7 +290,7 @@
     </ul>
 
     <div class="tab-content" id="pills-tabContent">
-        
+
         <!-- ============================================ -->
         <!-- TAB: RESUMEN -->
         <!-- ============================================ -->
@@ -294,7 +316,7 @@
                             <td>{{ metadata.preguntas|length }}</td>
                         </tr>
                     </table>
-                    
+
                     <h5 class="mb-3 mt-4"><i class="bi bi-list-check text-primary"></i> Preguntas Analizadas</h5>
                     <div class="table-responsive">
                         <table class="table table-sm table-hover">
@@ -437,18 +459,52 @@
         <!-- TAB: GRÁFICOS -->
         <!-- ============================================ -->
         <div class="tab-pane fade" id="pills-graficos" role="tabpanel">
+
+            {# ✅ Aviso de preguntas sin datos #}
+            {% if preguntas_sin_datos and preguntas_sin_datos|length > 0 %}
+            <div class="aviso-sin-datos">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <strong>Preguntas sin datos (omitidas):</strong>
+                {% for pid in preguntas_sin_datos %}
+                    <span class="badge bg-warning text-dark me-1">P{{ pid }}</span>
+                {% endfor %}
+                <br>
+                <small class="text-muted">
+                    Estas preguntas no fueron respondidas por ningún encuestado
+                    y por eso no se generaron gráficos para ellas.
+                </small>
+            </div>
+            {% endif %}
+
             {% if graficos %}
             <div class="row g-3">
-                {% for grafico in graficos %}
+                {% for g in graficos %}
                 <div class="col-md-6">
                     <div class="grafico-card">
                         <div class="grafico-titulo">
                             <i class="bi bi-graph-up text-primary"></i>
-                            {{ grafico.nombre }}
+                            {{ g.nombre }}
                         </div>
-                        <img src="{{ url_for('cuantitativo.servir_grafico', encuesta_id=encuesta.id, nombre_archivo=grafico.archivo) }}" 
-                             alt="{{ grafico.nombre }}"
-                             onclick="abrirModalImagen('{{ url_for('cuantitativo.servir_grafico', encuesta_id=encuesta.id, nombre_archivo=grafico.archivo) }}', '{{ grafico.nombre }}')">
+
+                        {% if g.html %}
+                            {# ✅ Gráfico interactivo Plotly #}
+                            <div class="plotly-wrapper">
+                                {{ g.html | safe }}
+                            </div>
+                            {% if g.archivo_png %}
+                            <div class="text-end px-3 pb-2">
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        onclick="abrirModalImagen('{{ url_for('cuantitativo.servir_grafico', encuesta_id=encuesta.id, nombre_archivo=g.archivo_png) }}', '{{ g.nombre }}')">
+                                    <i class="bi bi-arrows-fullscreen"></i> Ver PNG
+                                </button>
+                            </div>
+                            {% endif %}
+                        {% else %}
+                            {# Fallback: PNG estático #}
+                            <img src="{{ url_for('cuantitativo.servir_grafico', encuesta_id=encuesta.id, nombre_archivo=g.archivo) }}"
+                                 alt="{{ g.nombre }}"
+                                 onclick="abrirModalImagen('{{ url_for('cuantitativo.servir_grafico', encuesta_id=encuesta.id, nombre_archivo=g.archivo) }}', '{{ g.nombre }}')">
+                        {% endif %}
                     </div>
                 </div>
                 {% endfor %}
@@ -466,11 +522,11 @@
         <!-- ============================================ -->
         <div class="tab-pane fade" id="pills-correlaciones" role="tabpanel">
             {% if resultados.correlaciones and resultados.correlaciones.pares_significativos and resultados.correlaciones.pares_significativos|length > 0 %}
-            
+
             <div class="card card-custom">
                 <div class="card-header bg-light">
                     <h5 class="mb-0">
-                        <i class="bi bi-link-45deg text-primary"></i> 
+                        <i class="bi bi-link-45deg text-primary"></i>
                         Pares con Correlación Significativa (|r| ≥ 0.3)
                     </h5>
                 </div>
@@ -503,7 +559,7 @@
                     {% endfor %}
                 </div>
             </div>
-            
+
             {% else %}
             <div class="text-center py-5">
                 <i class="bi bi-link-45deg" style="font-size: 4rem; color: #ccc;"></i>
@@ -518,13 +574,13 @@
         <!-- ============================================ -->
         <div class="tab-pane fade" id="pills-grupos" role="tabpanel">
             {% if resultados.grupos and resultados.grupos.resumen and resultados.grupos.resumen|length > 0 %}
-            
+
             <div class="alert alert-info">
                 <i class="bi bi-info-circle"></i>
                 <strong>Grupo de comparación:</strong>
                 {{ resultados.grupos.grupo_pregunta }}
             </div>
-            
+
             <div class="card card-custom">
                 <div class="card-header bg-light">
                     <h5 class="mb-0"><i class="bi bi-bar-chart text-primary"></i> Comparación por Grupo</h5>
@@ -558,7 +614,7 @@
                     </div>
                 </div>
             </div>
-            
+
             {% else %}
             <div class="text-center py-5">
                 <i class="bi bi-people" style="font-size: 4rem; color: #ccc;"></i>
@@ -573,7 +629,7 @@
         <!-- ============================================ -->
         <div class="tab-pane fade" id="pills-satisfaccion" role="tabpanel">
             {% if resultados.indice_satisfaccion and resultados.indice_satisfaccion.indice_global %}
-            
+
             <div class="row">
                 <div class="col-md-4">
                     <div class="card card-custom h-100">
@@ -605,7 +661,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="col-md-8">
                     <div class="card card-custom h-100">
                         <div class="card-header bg-light">
@@ -630,10 +686,10 @@
                                             <td>
                                                 <div class="d-flex align-items-center">
                                                     <div class="progress flex-grow-1 me-2" style="height: 8px;">
-                                                        <div class="progress-bar 
+                                                        <div class="progress-bar
                                                             {% if row.Indice_Promedio >= 70 %}bg-success
                                                             {% elif row.Indice_Promedio >= 50 %}bg-warning
-                                                            {% else %}bg-danger{% endif %}" 
+                                                            {% else %}bg-danger{% endif %}"
                                                             style="width: {{ row.Indice_Promedio }}%"></div>
                                                     </div>
                                                     <strong>{{ row.Indice_Promedio }}</strong>
@@ -651,7 +707,7 @@
                     </div>
                 </div>
             </div>
-            
+
             {% else %}
             <div class="text-center py-5">
                 <i class="bi bi-star" style="font-size: 4rem; color: #ccc;"></i>
@@ -660,7 +716,7 @@
             </div>
             {% endif %}
         </div>
-        
+
     </div>
 </div>
 
@@ -688,6 +744,34 @@ function abrirModalImagen(src, titulo) {
     const modal = new bootstrap.Modal(document.getElementById('modalImagen'));
     modal.show();
 }
+
+// ✅ Resize de Plotly tras cargar la página
+document.addEventListener('DOMContentLoaded', function () {
+    setTimeout(function () {
+        document.querySelectorAll('.plotly-graph-div').forEach(function (el) {
+            try {
+                if (window.Plotly) {
+                    window.Plotly.Plots.resize(el);
+                }
+            } catch (e) { /* ignorar */ }
+        });
+    }, 300);
+});
+
+// ✅ Resize cuando se abre la pestaña de gráficos
+document.addEventListener('shown.bs.tab', function (e) {
+    if (e.target && e.target.id === 'pills-graficos-tab') {
+        setTimeout(function () {
+            document.querySelectorAll('.plotly-graph-div').forEach(function (el) {
+                try {
+                    if (window.Plotly) {
+                        window.Plotly.Plots.resize(el);
+                    }
+                } catch (e) { /* ignorar */ }
+            });
+        }, 100);
+    }
+});
 </script>
 
 {% endblock %}

@@ -1,8 +1,9 @@
 # app/utils/motor_cuantitativo_wrapper.py
 """
 Wrapper para ejecutar el motor cuantitativo desde Flask.
-Convierte todos los valores NaN a None para que el JSON sea válido.
-Auto-limpieza: elimina análisis anteriores antes de ejecutar uno nuevo.
+- Devuelve PNG (base64) + plotly_json para render en el navegador.
+- Incluye datos crudos para drill-down.
+- Persiste las figuras JSON en _graficos_plotly.json para el dashboard.
 """
 
 import os
@@ -13,14 +14,12 @@ import math
 import shutil
 import logging
 from datetime import datetime
-from io import BytesIO
 
 import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# Ruta al motor
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 MOTOR_DIR = os.path.join(BASE_DIR, 'motor_cuantitativo')
 
@@ -29,274 +28,254 @@ if MOTOR_DIR not in sys.path:
 
 
 # ============================================
-# AUTO-LIMPIEZA DE ANÁLISIS ANTERIORES
+# LIMPIEZA
 # ============================================
-
 def _limpiar_analisis_anteriores(directorio_padre):
-    """
-    Elimina TODOS los análisis anteriores en el directorio padre.
-    Solo mantiene el análisis más reciente.
-    
-    Args:
-        directorio_padre: ruta a motor_cuantitativo/data/resultados/
-    """
     if not os.path.exists(directorio_padre):
-        logger.info(f"📁 Directorio no existe aún: {directorio_padre}")
         return
-    
     try:
-        # Listar solo carpetas que empiecen con 'motor_' o 'encuesta_'
-        carpetas_analisis = [
-            d for d in os.listdir(directorio_padre)
-            if (d.startswith('motor_') or d.startswith('encuesta_'))
-            and os.path.isdir(os.path.join(directorio_padre, d))
-        ]
-        
-        if not carpetas_analisis:
-            logger.info("🧹 No hay análisis anteriores que limpiar")
-            return
-        
-        logger.info(f"🧹 Limpiando {len(carpetas_analisis)} análisis anteriores...")
-        
-        for carpeta in carpetas_analisis:
-            ruta = os.path.join(directorio_padre, carpeta)
-            try:
-                shutil.rmtree(ruta)
-                logger.info(f"  🗑️ Eliminado: {carpeta}")
-            except Exception as e:
-                logger.warning(f"  ⚠️ No se pudo eliminar {carpeta}: {e}")
-        
-        logger.info(f"✅ Limpieza completada")
-        
+        for d in os.listdir(directorio_padre):
+            if (d.startswith('motor_') or d.startswith('encuesta_')) \
+                    and os.path.isdir(os.path.join(directorio_padre, d)):
+                try:
+                    shutil.rmtree(os.path.join(directorio_padre, d))
+                    logger.info(f"  🗑️  Eliminado: {d}")
+                except Exception as e:
+                    logger.warning(f"  ⚠️ No se pudo eliminar {d}: {e}")
     except Exception as e:
-        logger.error(f"❌ Error en limpieza: {e}")
+        logger.error(f"❌ Error limpieza: {e}")
 
 
 def _limpiar_temporales(directorio_temp):
-    """
-    Elimina archivos temporales del directorio temp.
-    """
     if not os.path.exists(directorio_temp):
         return
-    
-    try:
-        for archivo in os.listdir(directorio_temp):
-            ruta = os.path.join(directorio_temp, archivo)
-            if os.path.isfile(ruta) and not archivo.startswith('.gitkeep'):
-                try:
-                    os.remove(ruta)
-                except Exception as e:
-                    logger.warning(f"No se pudo eliminar temporal {archivo}: {e}")
-    except Exception as e:
-        logger.warning(f"Error limpiando temporales: {e}")
+    for a in os.listdir(directorio_temp):
+        ruta = os.path.join(directorio_temp, a)
+        if os.path.isfile(ruta) and not a.startswith('.gitkeep'):
+            try:
+                os.remove(ruta)
+            except Exception:
+                pass
 
 
 # ============================================
 # SERIALIZACIÓN JSON SEGURA
 # ============================================
-
-def _es_nan(valor):
-    """Detecta si un valor es NaN/NaT/None de forma segura."""
-    if valor is None:
+def _es_nan(v):
+    if v is None:
         return True
     try:
-        resultado = pd.isna(valor)
-        if isinstance(resultado, (bool, np.bool_)):
-            return bool(resultado)
-        return False
+        r = pd.isna(v)
+        return bool(r) if isinstance(r, (bool, np.bool_)) else False
     except (TypeError, ValueError):
         return False
 
 
-def _limpiar_valor(valor):
-    """Convierte cualquier valor a un tipo serializable en JSON."""
-    if _es_nan(valor):
+def _limpiar_valor(v):
+    if _es_nan(v):
         return None
-    
-    if isinstance(valor, (np.integer,)):
-        return int(valor)
-    if isinstance(valor, (np.floating,)):
-        f = float(valor)
-        if math.isnan(f) or math.isinf(f):
-            return None
-        return f
-    if isinstance(valor, (np.bool_,)):
-        return bool(valor)
-    if isinstance(valor, np.ndarray):
-        return [_limpiar_valor(x) for x in valor.tolist()]
-    
-    if isinstance(valor, pd.Timestamp):
-        return valor.isoformat()
-    
-    if isinstance(valor, float):
-        if math.isnan(valor) or math.isinf(valor):
-            return None
-        return valor
-    
-    return valor
+    if isinstance(v, np.integer):
+        return int(v)
+    if isinstance(v, np.floating):
+        f = float(v)
+        return None if (math.isnan(f) or math.isinf(f)) else f
+    if isinstance(v, np.bool_):
+        return bool(v)
+    if isinstance(v, np.ndarray):
+        return [_limpiar_valor(x) for x in v.tolist()]
+    if isinstance(v, pd.Timestamp):
+        return v.isoformat()
+    if isinstance(v, float):
+        return None if (math.isnan(v) or math.isinf(v)) else v
+    return v
 
 
 def _df_a_lista(df):
-    """Convierte DataFrame a lista de dicts con JSON válido (sin NaN)."""
     if df is None or df.empty:
         return []
-    
-    resultado = []
-    for record in df.to_dict('records'):
-        fila_limpia = {k: _limpiar_valor(v) for k, v in record.items()}
-        resultado.append(fila_limpia)
-    
-    return resultado
+    return [
+        {k: _limpiar_valor(v) for k, v in rec.items()}
+        for rec in df.to_dict('records')
+    ]
 
 
 def _codificar_imagen_base64(ruta_png):
-    """Convierte un PNG a base64 para embeber en JSON."""
-    if not os.path.exists(ruta_png):
+    if not ruta_png or not os.path.exists(ruta_png):
         return None
     with open(ruta_png, 'rb') as f:
         return base64.b64encode(f.read()).decode('utf-8')
 
 
-# ============================================
-# FUNCIÓN PRINCIPAL
-# ============================================
+def _json_safe(obj):
+    """Limpia un objeto anidado para asegurar que sea JSON-safe."""
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_json_safe(x) for x in obj]
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating,)):
+        f = float(obj)
+        return None if (math.isnan(f) or math.isinf(f)) else f
+    if isinstance(obj, (np.bool_,)):
+        return bool(obj)
+    if isinstance(obj, np.ndarray):
+        return [_json_safe(x) for x in obj.tolist()]
+    if isinstance(obj, float):
+        return None if (math.isnan(obj) or math.isinf(obj)) else obj
+    return obj
 
+
+# ============================================
+# PRINCIPAL
+# ============================================
 def analizar_con_motor_cuantitativo(archivo):
-    """
-    Ejecuta el análisis cuantitativo sobre el archivo CSV subido.
-    
-    Args:
-        archivo: FileStorage de Flask
-    
-    Returns:
-        dict con los resultados (listo para jsonify)
-    """
     try:
         from motor_cuantitativo import AnalizadorCuantitativo
     except ImportError as e:
-        logger.error(f"Error importando el motor: {e}")
+        logger.error(f"Error importando motor: {e}")
         return {'success': False, 'message': f'Error al cargar el motor: {str(e)}'}
-    
-    # ============================================
-    # 1. AUTO-LIMPIEZA DE ANÁLISIS ANTERIORES
-    # ============================================
-    directorio_padre = os.path.join(
-        BASE_DIR, 'motor_cuantitativo', 'data', 'resultados'
-    )
-    directorio_temp = os.path.join(
-        BASE_DIR, 'motor_cuantitativo', 'data', 'temp'
-    )
-    
+
+    directorio_padre = os.path.join(BASE_DIR, 'motor_cuantitativo', 'data', 'resultados')
+    directorio_temp = os.path.join(BASE_DIR, 'motor_cuantitativo', 'data', 'temp')
+
     logger.info("=" * 60)
-    logger.info("🧹 Auto-limpieza de análisis anteriores...")
+    logger.info("🧹 Limpieza de análisis anteriores...")
     logger.info("=" * 60)
-    
     _limpiar_analisis_anteriores(directorio_padre)
     _limpiar_temporales(directorio_temp)
-    
-    # ============================================
-    # 2. GUARDAR ARCHIVO TEMPORAL
-    # ============================================
+
     os.makedirs(directorio_temp, exist_ok=True)
-    
-    nombre_original = archivo.filename
+
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    nombre_temp = f"temp_{timestamp}_{nombre_original}"
+    nombre_temp = f"temp_{timestamp}_{archivo.filename}"
     ruta_temp = os.path.join(directorio_temp, nombre_temp)
-    
     archivo.save(ruta_temp)
-    
-    # ============================================
-    # 3. EJECUTAR ANÁLISIS
-    # ============================================
-    directorio_resultados = os.path.join(
-        directorio_padre, f'motor_{timestamp}'
-    )
+
+    directorio_resultados = os.path.join(directorio_padre, f'motor_{timestamp}')
     os.makedirs(directorio_resultados, exist_ok=True)
-    
+
     try:
         analizador = AnalizadorCuantitativo(directorio_resultados=directorio_resultados)
-        
         resultados = analizador.analizar_completo(
             ruta_csv=ruta_temp,
             generar_graficos=True,
             guardar_excel=True,
-            guardar_json=True
+            guardar_json=True,
         )
     except Exception as e:
         import traceback
         traceback.print_exc()
         return {'success': False, 'message': f'Error en el análisis: {str(e)}'}
     finally:
-        # Limpiar archivo temporal
         try:
             if os.path.exists(ruta_temp):
                 os.remove(ruta_temp)
         except Exception:
             pass
-    
-    # ============================================
-    # 4. PREPARAR RESPUESTA JSON
-    # ============================================
+
     metadata = resultados['metadata']
-    
+
+    # ============================================
+    # SERIALIZAR TABLAS
+    # ============================================
     estadisticas = _df_a_lista(resultados.get('estadisticas_descriptivas'))
     frecuencias = _df_a_lista(resultados.get('frecuencias'))
-    
-    correlaciones_raw = resultados.get('correlaciones', {})
+
+    corr_raw = resultados.get('correlaciones', {})
     correlaciones = {
-        'matriz': _df_a_lista(correlaciones_raw.get('matriz')),
-        'pares_significativos': _df_a_lista(correlaciones_raw.get('pares_significativos'))
+        'matriz': _df_a_lista(corr_raw.get('matriz')),
+        'pares_significativos': _df_a_lista(corr_raw.get('pares_significativos')),
     }
-    
+
     grupos_raw = resultados.get('grupos', {})
     grupos = {
         'grupo_pregunta': grupos_raw.get('grupo_pregunta'),
-        'resumen': _df_a_lista(grupos_raw.get('resumen'))
+        'resumen': _df_a_lista(grupos_raw.get('resumen')),
     }
-    
+
     indice_raw = resultados.get('indice_satisfaccion', {})
     indice = {
         'indice_global': _limpiar_valor(indice_raw.get('indice_global')),
-        'por_pregunta': _df_a_lista(indice_raw.get('por_pregunta'))
+        'por_pregunta': _df_a_lista(indice_raw.get('por_pregunta')),
     }
-    
+
     # ============================================
-    # 5. GRÁFICOS COMO BASE64
+    # GRÁFICOS: {nombre: {nombre, base64, plotly_json}}
     # ============================================
     graficos = {}
     archivos_graficos = resultados.get('archivos', {}).get('graficos', {})
-    
-    for nombre, ruta in archivos_graficos.items():
-        b64 = _codificar_imagen_base64(ruta)
-        if b64:
-            nombre_limpio = nombre.replace('_', ' ').title()
-            graficos[nombre] = {
-                'nombre': nombre_limpio,
-                'base64': b64
-            }
-    
+
+    for nombre, datos in archivos_graficos.items():
+        if isinstance(datos, dict):
+            ruta_png = datos.get('png')
+            plotly_json = datos.get('plotly_json')
+        else:
+            ruta_png = datos
+            plotly_json = None
+
+        b64 = _codificar_imagen_base64(ruta_png)
+
+        nombre_limpio = (
+            nombre.replace('_', ' ')
+            .replace('P ', 'P')
+            .title()
+        )
+
+        graficos[nombre] = {
+            'nombre': nombre_limpio,
+            'base64': b64,
+            'plotly_json': _json_safe(plotly_json) if plotly_json else None,
+        }
+
     # ============================================
-    # 6. GUARDAR RUTAS PARA PDF/EXCEL
+    # DATOS CRUDOS (para drill-down)
     # ============================================
+    df_cat = resultados.get('df_categorico')
+    datos_crudos = []
+    if df_cat is not None and not df_cat.empty:
+        datos_crudos = [
+            {k: _limpiar_valor(v) for k, v in rec.items()}
+            for rec in df_cat.to_dict('records')
+        ]
+
+    # ============================================
+    # PERSISTIR plotly_json EN DISCO (para dashboard)
+    # ============================================
+    graficos_json_disk = {}
+    for nombre, datos in archivos_graficos.items():
+        if isinstance(datos, dict) and datos.get('plotly_json'):
+            graficos_json_disk[nombre] = datos['plotly_json']
+
+    if graficos_json_disk:
+        try:
+            ruta_json = os.path.join(directorio_resultados, '_graficos_plotly.json')
+            with open(ruta_json, 'w', encoding='utf-8') as f:
+                json.dump(graficos_json_disk, f, ensure_ascii=False)
+            logger.info(f"💾 Figuras Plotly persistidas: {len(graficos_json_disk)}")
+        except Exception as e:
+            logger.warning(f"No se pudieron persistir figuras: {e}")
+
+    # ============================================
+    # PERSISTIR RUTAS
+    # ============================================
+    preguntas_sin_datos = resultados.get('preguntas_sin_datos', [])
     archivo_excel = resultados.get('archivos', {}).get('excel')
-    archivo_json = resultados.get('archivos', {}).get('json')
-    
+    archivo_json_resultados = resultados.get('archivos', {}).get('json')
+
     rutas_meta = {
         'directorio': directorio_resultados,
         'excel': archivo_excel,
-        'json': archivo_json,
-        'timestamp': timestamp
+        'json': archivo_json_resultados,
+        'timestamp': timestamp,
+        'preguntas_sin_datos': preguntas_sin_datos,
     }
-    
+
     with open(os.path.join(directorio_resultados, '_rutas.json'), 'w') as f:
         json.dump(rutas_meta, f)
-    
+
     logger.info(f"✅ Análisis guardado en: {directorio_resultados}")
-    
-    # ============================================
-    # 7. RESPUESTA FINAL
-    # ============================================
+
     return {
         'success': True,
         'metadata': {
@@ -304,15 +283,18 @@ def analizar_con_motor_cuantitativo(archivo):
             'descripcion': metadata.get('descripcion', ''),
             'total_encuestados': metadata.get('total_encuestados', 0),
             'total_preguntas': len(metadata.get('preguntas', [])),
-            'preguntas': metadata.get('preguntas', [])
+            'preguntas': metadata.get('preguntas', []),
         },
+        'metadata_preguntas': metadata.get('preguntas', []),
         'estadisticas_descriptivas': estadisticas,
         'frecuencias': frecuencias,
         'correlaciones': correlaciones,
         'grupos': grupos,
         'indice_satisfaccion': indice,
         'graficos': graficos,
+        'datos_crudos': datos_crudos,
+        'preguntas_sin_datos': preguntas_sin_datos,
         'directorio_resultados': directorio_resultados,
         'timestamp': timestamp,
-        'archivo_excel': os.path.basename(archivo_excel) if archivo_excel else None
+        'archivo_excel': os.path.basename(archivo_excel) if archivo_excel else None,
     }

@@ -24,87 +24,49 @@ logger = logging.getLogger(__name__)
 
 
 class AnalizadorCuantitativo:
-    """
-    Motor de análisis cuantitativo para encuestas.
-    
-    Uso:
-        analizador = AnalizadorCuantitativo()
-        resultados = analizador.analizar_completo('exports/cuantitativo_1.csv')
-    """
-    
+    """Motor de análisis cuantitativo para encuestas."""
+
     def __init__(self, directorio_resultados='data/resultados'):
-        """
-        Args:
-            directorio_resultados: dónde guardar Excel, JSON y PNGs
-        """
         self.directorio_resultados = directorio_resultados
         os.makedirs(directorio_resultados, exist_ok=True)
-    
+
     def analizar_completo(
         self,
         ruta_csv,
         generar_graficos=True,
         guardar_excel=True,
         guardar_json=True,
-        n_grupos=None
+        n_grupos=None,
+        incluir_html=True,
     ):
-        """
-        Ejecuta el análisis completo de un CSV cuantitativo.
-        
-        Args:
-            ruta_csv: ruta al CSV exportado por el sistema Flask
-            generar_graficos: si True, genera PNGs
-            guardar_excel: si True, guarda Excel
-            guardar_json: si True, guarda JSON
-            n_grupos: ID de pregunta a usar para agrupar (None = auto)
-        
-        Returns:
-            dict con todos los resultados y rutas de archivos generados
-        """
         logger.info("=" * 60)
         logger.info("🚀 INICIANDO ANÁLISIS CUANTITATIVO")
         logger.info("=" * 60)
-        
-        # ============================================
-        # 1. LEER DATOS
-        # ============================================
+
+        # 1. LEER
         logger.info("\n📂 Leyendo CSV...")
         datos = leer_csv_cuantitativo(ruta_csv)
         metadata = datos['metadata']
         df_categorico = datos['df']
-        
         logger.info(f"✅ {len(df_categorico)} encuestados")
-        logger.info(f"✅ {len(metadata['preguntas'])} preguntas cuantitativas")
-        
-        # ============================================
-        # 2. CONVERTIR A NUMÉRICO
-        # ============================================
+
+        # 2. NUMÉRICO
         logger.info("\n🔢 Convirtiendo valores a numérico...")
         conversion = convertir_a_numerico(df_categorico, metadata)
         df_numerico = conversion['df_numerico']
         mapeos = conversion['mapeos']
-        
-        # ============================================
+
         # 3. ESTADÍSTICAS
-        # ============================================
-        logger.info("\n📊 Calculando estadísticas descriptivas...")
+        logger.info("\n📊 Estadísticas...")
         estadisticas = calcular_estadisticas_descriptivas(df_numerico, metadata)
-        
-        logger.info("📊 Calculando frecuencias...")
         frecuencias = calcular_frecuencias(df_categorico, metadata)
-        
-        logger.info("🔗 Calculando correlaciones...")
         correlaciones = calcular_correlaciones(df_numerico, metadata, metodo='spearman')
-        
-        logger.info("👥 Analizando grupos...")
-        grupos = analizar_grupos(df_numerico, df_categorico, metadata, pregunta_grupo_id=n_grupos)
-        
-        logger.info("⭐ Calculando índice de satisfacción...")
+        grupos = analizar_grupos(df_numerico, df_categorico, metadata,
+                                 pregunta_grupo_id=n_grupos)
         indice = calcular_indice_satisfaccion(df_numerico, metadata)
-        
-        # Tabla de contingencia (entre 2 primeras preguntas Sí/No si existen)
-        logger.info("📋 Calculando tabla de contingencia...")
-        preguntas_sino = [p for p in metadata['preguntas'] if p['tipo'] == 'seleccion_si_no']
+
+        preguntas_sino = [p for p in metadata['preguntas']
+                          if p['tipo'] == 'seleccion_si_no']
         contingencia = None
         if len(preguntas_sino) >= 2:
             contingencia = calcular_tabla_contingencia(
@@ -112,10 +74,8 @@ class AnalizadorCuantitativo:
                 preguntas_sino[0]['id'],
                 preguntas_sino[1]['id']
             )
-        
-        # ============================================
-        # 4. CONSOLIDAR RESULTADOS
-        # ============================================
+
+        # 4. CONSOLIDAR
         resultados = {
             'metadata': metadata,
             'estadisticas_descriptivas': estadisticas,
@@ -128,15 +88,14 @@ class AnalizadorCuantitativo:
             'df_numerico': df_numerico,
             'mapeos': mapeos
         }
-        
-        # ============================================
-        # 5. GENERAR GRÁFICOS
-        # ============================================
+
+        # 5. GRÁFICOS
         archivos_generados = {}
-        
+        preguntas_omitidas = []
+
         if generar_graficos:
             directorio_graficos = os.path.join(self.directorio_resultados, 'graficos')
-            graficos = generar_todos_los_graficos(
+            salida = generar_todos_los_graficos(
                 metadata=metadata,
                 df_numerico=df_numerico,
                 df_categorico=df_categorico,
@@ -144,30 +103,29 @@ class AnalizadorCuantitativo:
                 correlaciones_result=correlaciones,
                 grupos_result=grupos,
                 indice_result=indice,
-                directorio=directorio_graficos
+                directorio=directorio_graficos,
+                incluir_html=incluir_html,
             )
-            archivos_generados['graficos'] = graficos
-        
-        # ============================================
-        # 6. GUARDAR EXCEL
-        # ============================================
+            archivos_generados['graficos'] = salida['graficos']
+            preguntas_omitidas = salida['omitidos']
+            resultados['preguntas_sin_datos'] = preguntas_omitidas
+
+        # 6. EXCEL
         if guardar_excel:
             logger.info("\n💾 Guardando Excel...")
-            # Preparar resultados sin DataFrames gigantes para el Excel
             resultados_excel = {
                 'estadisticas_descriptivas': estadisticas,
                 'frecuencias': frecuencias,
                 'correlaciones': correlaciones,
                 'grupos': grupos,
                 'indice_satisfaccion': indice,
-                'df_categorico': df_categorico
+                'df_categorico': df_categorico,
             }
-            ruta_excel = guardar_excel_completo(resultados_excel, metadata, self.directorio_resultados)
+            ruta_excel = guardar_excel_completo(resultados_excel, metadata,
+                                                 self.directorio_resultados)
             archivos_generados['excel'] = ruta_excel
-        
-        # ============================================
-        # 7. GUARDAR JSON
-        # ============================================
+
+        # 7. JSON
         if guardar_json:
             logger.info("💾 Guardando JSON...")
             resultados_json = {
@@ -176,31 +134,32 @@ class AnalizadorCuantitativo:
                 'correlaciones': correlaciones,
                 'grupos': grupos,
                 'indice_satisfaccion': indice,
-                'contingencia': contingencia
+                'contingencia': contingencia,
+                'preguntas_sin_datos': preguntas_omitidas,
             }
-            ruta_json = guardar_json_resultados(resultados_json, metadata, self.directorio_resultados)
+            ruta_json = guardar_json_resultados(resultados_json, metadata,
+                                                 self.directorio_resultados)
             archivos_generados['json'] = ruta_json
-        
-        # ============================================
-        # 8. RESUMEN EN CONSOLA
-        # ============================================
+
         self._mostrar_resumen(resultados)
-        
+
         resultados['archivos'] = archivos_generados
         return resultados
-    
+
     def _mostrar_resumen(self, resultados):
-        """Muestra un resumen del análisis en consola."""
         logger.info("\n" + "=" * 60)
         logger.info("📊 RESUMEN DEL ANÁLISIS")
         logger.info("=" * 60)
-        
+
         meta = resultados['metadata']
         logger.info(f"\n📋 Encuesta: {meta['titulo']}")
         logger.info(f"👥 Encuestados: {meta['total_encuestados']}")
         logger.info(f"❓ Preguntas: {len(meta['preguntas'])}")
-        
-        # Estadísticas clave
+
+        omitidas = resultados.get('preguntas_sin_datos', [])
+        if omitidas:
+            logger.info(f"⏭️  Preguntas sin datos (omitidas): {omitidas}")
+
         est = resultados['estadisticas_descriptivas']
         if not est.empty:
             logger.info("\n📊 Estadísticas descriptivas:")
@@ -208,24 +167,15 @@ class AnalizadorCuantitativo:
                 if pd.notna(row.get('Media')):
                     logger.info(f"   • {row['Pregunta'][:50]}")
                     logger.info(f"     Media: {row['Media']} | Desv: {row['Desv_Est']}")
-        
-        # Correlaciones significativas
+
         corr = resultados['correlaciones']
         if corr.get('pares_significativos') is not None and not corr['pares_significativos'].empty:
-            logger.info(f"\n🔗 Correlaciones significativas: {len(corr['pares_significativos'])}")
-            for _, row in corr['pares_significativos'].head(3).iterrows():
-                logger.info(f"   • r={row['Correlacion']}: {row['Pregunta_1'][:30]} ↔ {row['Pregunta_2'][:30]}")
-        
-        # Índice de satisfacción
+            logger.info(f"\n🔗 Correlaciones: {len(corr['pares_significativos'])}")
+
         indice = resultados['indice_satisfaccion']
         if indice.get('indice_global') is not None:
-            logger.info(f"\n⭐ Índice de satisfacción global: {indice['indice_global']}/100")
-        
-        # Grupos
-        grupos = resultados['grupos']
-        if grupos.get('grupo_pregunta'):
-            logger.info(f"\n👥 Análisis por grupos: {grupos['grupo_pregunta'][:60]}")
-        
+            logger.info(f"\n⭐ Índice de satisfacción: {indice['indice_global']}/100")
+
         logger.info("\n" + "=" * 60)
         logger.info("✅ ANÁLISIS COMPLETADO")
         logger.info("=" * 60)

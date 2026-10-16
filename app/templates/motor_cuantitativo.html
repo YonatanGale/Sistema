@@ -20,16 +20,14 @@
     }
     .drop-zone-cuanti i { font-size: 4rem; color: #6c757d; }
     .drop-zone-cuanti.dragover i { color: #9b59b6; }
-    
+
     .loading-analisis { display: none; text-align: center; padding: 40px; }
     .loading-analisis.show { display: block; }
     .resultados-container { display: none; }
     .resultados-container.show { display: block; }
-    
+
     .kpi-card {
-        border-radius: 12px;
-        padding: 20px;
-        color: white;
+        border-radius: 12px; padding: 20px; color: white;
         box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         transition: all 0.3s ease;
     }
@@ -41,60 +39,58 @@
     .kpi-success { background: linear-gradient(135deg, #2ecc71, #27ae60); }
     .kpi-warning { background: linear-gradient(135deg, #f39c12, #e67e22); }
     .kpi-info    { background: linear-gradient(135deg, #3498db, #2980b9); }
-    
+
     .grafico-card {
-        border-radius: 12px;
-        overflow: hidden;
+        border-radius: 12px; overflow: hidden;
         box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-        transition: all 0.3s ease;
-        background: white;
-        height: 100%;
+        transition: all 0.3s ease; background: white; height: 100%;
     }
     .grafico-card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.15); }
     .grafico-card img { width: 100%; height: auto; cursor: pointer; display: block; }
     .grafico-card .grafico-titulo {
-        padding: 12px 15px;
-        background: #f8f9fa;
+        padding: 12px 15px; background: #f8f9fa;
         border-bottom: 1px solid #e9ecef;
-        font-weight: 600;
-        font-size: 0.9rem;
-        color: #2c3e50;
+        font-weight: 600; font-size: 0.9rem; color: #2c3e50;
     }
-    
+    .grafico-card .grafico-hint {
+        padding: 6px 12px; background: #eef7ff;
+        font-size: 0.75rem; color: #2980b9;
+        border-top: 1px solid #d6eaf8;
+    }
+
+    /* ✅ Contenedor del gráfico a ancho completo del card */
+    .plotly-wrapper {
+        width: 100%;
+        overflow: visible;
+        padding: 0;
+    }
+    .plotly-wrapper .plotly-graph-div {
+        width: 100% !important;
+    }
+
     .paso-analisis {
-        padding: 1rem;
-        margin-bottom: 0.5rem;
-        border-radius: 8px;
-        background-color: #e9ecef;
-        opacity: 0.5;
-        transition: all 0.3s ease;
+        padding: 1rem; margin-bottom: 0.5rem;
+        border-radius: 8px; background-color: #e9ecef;
+        opacity: 0.5; transition: all 0.3s ease;
     }
     .paso-analisis.activo {
-        opacity: 1;
-        background-color: #e8daef;
+        opacity: 1; background-color: #e8daef;
         border-left: 4px solid #9b59b6;
     }
-    
+
     .spinner-grande { width: 4rem; height: 4rem; color: #9b59b6; }
-    
+
     .correlacion-item {
-        padding: 10px 15px;
-        border-left: 4px solid #3498db;
-        background: #f8f9fa;
-        border-radius: 6px;
-        margin-bottom: 8px;
+        padding: 10px 15px; border-left: 4px solid #3498db;
+        background: #f8f9fa; border-radius: 6px; margin-bottom: 8px;
     }
     .correlacion-item.fuerte { border-left-color: #e74c3c; }
     .correlacion-item.moderada { border-left-color: #f39c12; }
     .correlacion-item.debil { border-left-color: #95a5a6; }
-    
+
     .indice-circular {
-        width: 160px;
-        height: 160px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        width: 160px; height: 160px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
         margin: 0 auto;
         background: conic-gradient(
             var(--color-indice) 0deg,
@@ -104,53 +100,124 @@
         );
     }
     .indice-circular-inner {
-        width: 125px;
-        height: 125px;
-        border-radius: 50%;
-        background: white;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
+        width: 125px; height: 125px; border-radius: 50%;
+        background: white; display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
     }
     .indice-circular .indice-valor { font-size: 2.2rem; font-weight: 700; color: #2c3e50; }
     .indice-circular .indice-max { font-size: 0.8rem; color: #7f8c8d; }
-    
+
     .nav-pills .nav-link {
-        color: #495057;
-        border-radius: 8px;
-        padding: 8px 16px;
-        font-weight: 500;
-        font-size: 0.9rem;
+        color: #495057; border-radius: 8px;
+        padding: 8px 16px; font-weight: 500; font-size: 0.9rem;
     }
     .nav-pills .nav-link.active {
-        background: linear-gradient(135deg, #9b59b6, #8e44ad);
-        color: white;
+        background: linear-gradient(135deg, #9b59b6, #8e44ad); color: white;
     }
-    
+
     .modal-imagen .modal-body {
-        text-align: center;
-        background: #2c3e50;
-        padding: 10px;
+        text-align: center; background: #2c3e50; padding: 10px;
     }
     .modal-imagen .modal-body img { max-width: 100%; max-height: 85vh; }
-    
+
     .aviso-vacio {
-        background: #fff9e6;
-        border: 2px dashed #f39c12;
-        border-radius: 12px;
-        padding: 3rem 2rem;
-        text-align: center;
+        background: #fff9e6; border: 2px dashed #f39c12;
+        border-radius: 12px; padding: 3rem 2rem; text-align: center;
     }
     .aviso-vacio i { font-size: 4rem; color: #f39c12; }
     .aviso-vacio h4 { color: #d35400; margin-top: 1rem; }
     .aviso-vacio .sugerencia {
-        background: white;
-        border-radius: 8px;
-        padding: 1rem;
-        margin-top: 1rem;
-        text-align: left;
-        font-size: 0.9rem;
+        background: white; border-radius: 8px;
+        padding: 1rem; margin-top: 1rem;
+        text-align: left; font-size: 0.9rem;
+    }
+
+    /* ============ DRILL-DOWN MODAL ============ */
+    .drilldown-bar {
+        display: flex; align-items: center;
+        margin-bottom: 6px; gap: 8px;
+    }
+    .drilldown-bar .label {
+        flex: 0 0 200px; font-size: 0.82rem;
+        overflow: hidden; text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .drilldown-bar .progress {
+        flex: 1 1 auto; height: 16px; background: #ecf0f1;
+    }
+    .drilldown-bar .valor {
+        flex: 0 0 90px; text-align: right;
+        font-size: 0.8rem;
+    }
+    .drilldown-card {
+        border: 1px solid #e9ecef; border-radius: 8px;
+        padding: 14px; margin-bottom: 12px; background: #fdfdfd;
+    }
+    .drilldown-card h6 {
+        font-size: 0.9rem; color: #2c3e50;
+        margin-bottom: 10px;
+        border-bottom: 1px solid #f0f0f0; padding-bottom: 6px;
+    }
+    .cursor-pointer .plotly-graph-div { cursor: pointer; }
+
+    /* ============ TARJETA DE SELECCIÓN INLINE ============ */
+    .tarjeta-seleccion {
+        margin: 10px;
+        border: 2px solid #9b59b6;
+        border-radius: 10px;
+        background: #faf5ff;
+        overflow: hidden;
+        animation: slideDown 0.25s ease;
+    }
+    @keyframes slideDown {
+        from { opacity: 0; transform: translateY(-6px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    .tarjeta-seleccion .tarjeta-header {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px 14px;
+        background: linear-gradient(135deg, #9b59b6, #8e44ad);
+        color: white;
+    }
+    .tarjeta-seleccion .tarjeta-header > div:first-child {
+        flex: 1 1 auto; font-size: 0.9rem;
+    }
+    .tarjeta-seleccion .tarjeta-header .text-success { color: #b3ffd9 !important; }
+    .tarjeta-seleccion .tarjeta-stats { display: flex; gap: 6px; }
+    .tarjeta-seleccion .btn-cerrar-tarjeta {
+        background: rgba(255,255,255,0.15);
+        border: none; color: white;
+        padding: 4px 8px;
+    }
+    .tarjeta-seleccion .btn-cerrar-tarjeta:hover {
+        background: rgba(255,255,255,0.3); color: white;
+    }
+    .tarjeta-seleccion .tarjeta-body {
+        padding: 10px 14px;
+        display: flex; flex-direction: column; gap: 10px;
+    }
+    .tarjeta-seleccion .mini-preg {
+        border-left: 3px solid #9b59b6;
+        padding-left: 10px;
+    }
+    .tarjeta-seleccion .mini-titulo {
+        font-size: 0.82rem; color: #555;
+        margin-bottom: 5px;
+    }
+    .tarjeta-seleccion .mini-fila {
+        display: flex; justify-content: space-between;
+        font-size: 0.8rem; padding: 2px 0;
+        border-bottom: 1px dashed #e9d8f5;
+    }
+    .tarjeta-seleccion .mini-fila:last-child { border-bottom: none; }
+    .tarjeta-seleccion .mini-op {
+        color: #444;
+        max-width: 60%;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .tarjeta-seleccion .tarjeta-footer {
+        padding: 8px 14px 12px;
+        text-align: right;
     }
 </style>
 {% endblock %}
@@ -164,35 +231,34 @@
                 Motor de Análisis Cuantitativo
             </h1>
             <p class="lead text-muted">
-                Estadísticas, correlaciones, gráficos e índice de satisfacción
+                Estadísticas, correlaciones, gráficos interactivos e índice de satisfacción
             </p>
             <hr class="w-50 mx-auto">
         </div>
     </div>
 
     <div class="row">
-        <div class="col-lg-10 mx-auto">
-            <!-- SECCIÓN DE CARGA -->
+        <div class="col-lg-12 mx-auto">
+            <!-- CARGA -->
             <div class="card card-custom" id="cardCarga">
                 <div class="card-header" style="background: linear-gradient(135deg, #9b59b6, #8e44ad); color: white;">
-                    <h5 class="mb-0">
-                        <i class="bi bi-upload"></i> Subir archivo CSV
-                    </h5>
+                    <h5 class="mb-0"><i class="bi bi-upload"></i> Subir archivo CSV</h5>
                 </div>
                 <div class="card-body">
                     <div class="alert alert-info">
                         <i class="bi bi-info-circle"></i>
                         <strong>¿Cómo funciona?</strong>
                         <ol class="mb-0 mt-2">
-                            <li>Sube el archivo CSV que descargaste desde <strong>Respuestas → Exportar → Exportar CSV Cuantitativo</strong></li>
+                            <li>Sube el CSV que descargaste desde <strong>Respuestas → Exportar → Exportar CSV Cuantitativo</strong></li>
                             <li>El motor calculará estadísticas, correlaciones, gráficos e índice de satisfacción</li>
+                            <li><strong>Haz click en cualquier porción del pastel</strong> para resaltarla y ver su desglose</li>
                             <li>Al final podrás descargar los resultados en Excel o PDF</li>
                         </ol>
                     </div>
 
                     <form id="formAnalisisCuanti" enctype="multipart/form-data">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        
+
                         <div class="drop-zone-cuanti" id="dropZoneCuanti">
                             <i class="bi bi-cloud-arrow-up"></i>
                             <h5 class="mt-3">Arrastra tu archivo CSV aquí</h5>
@@ -224,28 +290,15 @@
             <div class="loading-analisis" id="loadingAnalisisCuanti">
                 <div class="card card-custom">
                     <div class="card-body text-center py-5">
-                        <div class="spinner-border spinner-grande" role="status">
-                            <span class="visually-hidden">Analizando...</span>
-                        </div>
+                        <div class="spinner-border spinner-grande" role="status"></div>
                         <h4 class="mt-4">Analizando datos...</h4>
                         <p class="text-muted">El motor está procesando los datos</p>
-                        
                         <div class="mt-4 text-start">
-                            <div class="paso-analisis activo" id="paso1">
-                                <i class="bi bi-1-circle"></i> Leyendo archivo CSV...
-                            </div>
-                            <div class="paso-analisis" id="paso2">
-                                <i class="bi bi-2-circle"></i> Calculando estadísticas descriptivas...
-                            </div>
-                            <div class="paso-analisis" id="paso3">
-                                <i class="bi bi-3-circle"></i> Calculando correlaciones (Spearman)...
-                            </div>
-                            <div class="paso-analisis" id="paso4">
-                                <i class="bi bi-4-circle"></i> Analizando grupos e índice de satisfacción...
-                            </div>
-                            <div class="paso-analisis" id="paso5">
-                                <i class="bi bi-5-circle"></i> Generando gráficos...
-                            </div>
+                            <div class="paso-analisis activo" id="paso1"><i class="bi bi-1-circle"></i> Leyendo archivo CSV...</div>
+                            <div class="paso-analisis" id="paso2"><i class="bi bi-2-circle"></i> Calculando estadísticas descriptivas...</div>
+                            <div class="paso-analisis" id="paso3"><i class="bi bi-3-circle"></i> Calculando correlaciones (Spearman)...</div>
+                            <div class="paso-analisis" id="paso4"><i class="bi bi-4-circle"></i> Analizando grupos e índice de satisfacción...</div>
+                            <div class="paso-analisis" id="paso5"><i class="bi bi-5-circle"></i> Generando gráficos interactivos...</div>
                         </div>
                     </div>
                 </div>
@@ -253,8 +306,6 @@
 
             <!-- RESULTADOS -->
             <div class="resultados-container" id="resultadosCuanti">
-                
-                <!-- KPIs -->
                 <div class="row g-3 mt-2">
                     <div class="col-md-3">
                         <div class="kpi-card kpi-primary position-relative">
@@ -286,11 +337,10 @@
                     </div>
                 </div>
 
-                <!-- TABS -->
-                <ul class="nav nav-pills my-4" id="pills-tab" role="tablist">
+                <ul class="nav nav-pills my-4" role="tablist">
                     <li class="nav-item">
                         <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#tab-graficos">
-                            <i class="bi bi-bar-chart-line"></i> Gráficos
+                            <i class="bi bi-pie-chart-line"></i> Gráficos
                             <span class="badge bg-light text-dark ms-1" id="badgeGraficos">0</span>
                         </button>
                     </li>
@@ -317,12 +367,20 @@
                 </ul>
 
                 <div class="tab-content">
-                    <!-- Gráficos -->
                     <div class="tab-pane fade show active" id="tab-graficos">
-                        <div class="row g-3" id="contenedorGraficos"></div>
+                        <div id="avisoPreguntasSinDatos"></div>
+                        <div class="alert alert-primary d-flex align-items-center mb-3">
+                            <i class="bi bi-hand-index-thumb-fill me-2" style="font-size:1.2rem;"></i>
+                            <div>
+                                <strong>Gráficos interactivos:</strong> haz click en cualquier
+                                <strong>porción del pastel</strong> para resaltarla
+                                y ver el desglose de quiénes eligieron esa opción.
+                            </div>
+                        </div>
+                        <!-- ✅ Ancho completo (col-12) -->
+                        <div class="row g-4" id="contenedorGraficos"></div>
                     </div>
 
-                    <!-- Estadísticas -->
                     <div class="tab-pane fade" id="tab-estadisticas">
                         <div class="card card-custom">
                             <div class="card-header bg-light">
@@ -333,16 +391,9 @@
                                     <table class="table table-sm table-hover">
                                         <thead class="table-dark">
                                             <tr>
-                                                <th>Pregunta</th>
-                                                <th>N</th>
-                                                <th>Media</th>
-                                                <th>Mediana</th>
-                                                <th>Moda</th>
-                                                <th>Desv. Est.</th>
-                                                <th>Min</th>
-                                                <th>Max</th>
-                                                <th>Q1</th>
-                                                <th>Q3</th>
+                                                <th>Pregunta</th><th>N</th><th>Media</th><th>Mediana</th>
+                                                <th>Moda</th><th>Desv. Est.</th><th>Min</th>
+                                                <th>Max</th><th>Q1</th><th>Q3</th>
                                             </tr>
                                         </thead>
                                         <tbody id="tbodyEstadisticas"></tbody>
@@ -350,7 +401,6 @@
                                 </div>
                             </div>
                         </div>
-                        
                         <div class="card card-custom mt-3">
                             <div class="card-header bg-light">
                                 <h5 class="mb-0"><i class="bi bi-list-ol"></i> Frecuencias</h5>
@@ -359,12 +409,7 @@
                                 <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
                                     <table class="table table-sm table-hover">
                                         <thead class="table-dark sticky-top">
-                                            <tr>
-                                                <th>Pregunta</th>
-                                                <th>Opción</th>
-                                                <th>Frecuencia</th>
-                                                <th>%</th>
-                                            </tr>
+                                            <tr><th>Pregunta</th><th>Opción</th><th>Frecuencia</th><th>%</th></tr>
                                         </thead>
                                         <tbody id="tbodyFrecuencias"></tbody>
                                     </table>
@@ -373,36 +418,27 @@
                         </div>
                     </div>
 
-                    <!-- Correlaciones -->
                     <div class="tab-pane fade" id="tab-correlaciones">
                         <div id="contenedorCorrelaciones"></div>
                     </div>
 
-                    <!-- Grupos -->
                     <div class="tab-pane fade" id="tab-grupos">
                         <div id="contenedorGrupos"></div>
                     </div>
 
-                    <!-- Satisfacción -->
                     <div class="tab-pane fade" id="tab-satisfaccion">
                         <div id="contenedorSatisfaccion"></div>
                     </div>
                 </div>
 
-                <!-- Botones de acción -->
                 <div class="text-center mt-4 mb-5">
-                    <a href="{{ url_for('cuantitativo.descargar_pdf') }}" 
-                       class="btn btn-custom btn-danger btn-lg me-2" 
-                       id="btnDescargarPDF">
+                    <a href="{{ url_for('cuantitativo.descargar_pdf') }}" class="btn btn-custom btn-danger btn-lg me-2">
                         <i class="bi bi-file-earmark-pdf"></i> Descargar PDF
                     </a>
-                    <a href="{{ url_for('cuantitativo.descargar_excel') }}" 
-                       class="btn btn-custom btn-success btn-lg me-2" 
-                       id="btnDescargarExcel">
+                    <a href="{{ url_for('cuantitativo.descargar_excel') }}" class="btn btn-custom btn-success btn-lg me-2">
                         <i class="bi bi-file-earmark-excel"></i> Descargar Excel
                     </a>
-                    <button class="btn btn-custom btn-custom-primary btn-lg" 
-                            onclick="reiniciarAnalisisCuanti()">
+                    <button class="btn btn-custom btn-custom-primary btn-lg" onclick="reiniciarAnalisisCuanti()">
                         <i class="bi bi-arrow-clockwise"></i> Analizar otro archivo
                     </button>
                 </div>
@@ -411,7 +447,23 @@
     </div>
 </div>
 
-<!-- Modal para ver gráfico ampliado -->
+<!-- MODAL: DRILL-DOWN COMPLETO -->
+<div class="modal fade" id="modalDrilldown" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #9b59b6, #8e44ad); color:white;">
+                <h5 class="modal-title" id="drilldownTitulo">Detalle</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="drilldownResumen" class="mb-3"></div>
+                <div id="drilldownContenido"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: IMAGEN -->
 <div class="modal fade modal-imagen" id="modalImagen" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content">
@@ -429,6 +481,15 @@
 
 {% block extra_js %}
 <script>
+// ============================================
+// ESTADO GLOBAL
+// ============================================
+window.__datosCrudos = [];
+window.__metadata = { preguntas: [] };
+
+// ============================================
+// SUBIDA DE ARCHIVO
+// ============================================
 document.addEventListener('DOMContentLoaded', function() {
     const dropZone = document.getElementById('dropZoneCuanti');
     const fileInput = document.getElementById('archivoCuanti');
@@ -439,8 +500,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     dropZone.addEventListener('click', () => fileInput.click());
     dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.classList.add('dragover');
+        e.preventDefault(); dropZone.classList.add('dragover');
     });
     dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
     dropZone.addEventListener('drop', (e) => {
@@ -474,16 +534,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     form.addEventListener('submit', function(e) {
         e.preventDefault();
-        
-        if (!fileInput.files[0]) {
-            alert('Debes seleccionar un archivo');
-            return;
-        }
+        if (!fileInput.files[0]) { alert('Debes seleccionar un archivo'); return; }
 
         document.getElementById('cardCarga').style.display = 'none';
         document.getElementById('loadingAnalisisCuanti').classList.add('show');
         document.getElementById('resultadosCuanti').classList.remove('show');
-
         animarPasos();
 
         const formData = new FormData();
@@ -493,14 +548,11 @@ document.addEventListener('DOMContentLoaded', function() {
         fetch('/motor-cuantitativo/analizar', {
             method: 'POST',
             body: formData,
-            headers: {
-                'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value
-            }
+            headers: { 'X-CSRFToken': document.querySelector('input[name="csrf_token"]').value }
         })
-        .then(response => response.json())
+        .then(r => r.json())
         .then(data => {
             document.getElementById('loadingAnalisisCuanti').classList.remove('show');
-            
             if (data.success) {
                 mostrarResultadosCuanti(data);
                 document.getElementById('resultadosCuanti').classList.add('show');
@@ -524,16 +576,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const pasos = ['paso1', 'paso2', 'paso3', 'paso4', 'paso5'];
         pasos.forEach(p => document.getElementById(p).classList.remove('activo'));
         document.getElementById('paso1').classList.add('activo');
-        
         let i = 1;
         const interval = setInterval(() => {
             if (i < pasos.length) {
                 document.getElementById(pasos[i-1]).classList.remove('activo');
                 document.getElementById(pasos[i]).classList.add('activo');
                 i++;
-            } else {
-                clearInterval(interval);
-            }
+            } else clearInterval(interval);
         }, 3000);
     }
 });
@@ -544,13 +593,19 @@ document.addEventListener('DOMContentLoaded', function() {
 function mostrarResultadosCuanti(data) {
     document.getElementById('kpiEncuestados').textContent = data.metadata.total_encuestados;
     document.getElementById('kpiPreguntas').textContent = data.metadata.total_preguntas;
-    document.getElementById('kpiIndice').textContent = 
-        data.indice_satisfaccion && data.indice_satisfaccion.indice_global 
+    document.getElementById('kpiIndice').textContent =
+        data.indice_satisfaccion && data.indice_satisfaccion.indice_global
             ? data.indice_satisfaccion.indice_global : 'N/A';
-    document.getElementById('kpiCorrelaciones').textContent = 
-        data.correlaciones.pares_significativos.length;
-    
-    mostrarGraficos(data.graficos);
+    document.getElementById('kpiCorrelaciones').textContent =
+        (data.correlaciones && data.correlaciones.pares_significativos)
+            ? data.correlaciones.pares_significativos.length : 0;
+
+    mostrarAvisoPreguntasSinDatos(data.preguntas_sin_datos);
+    mostrarGraficos(
+        data.graficos,
+        data.metadata_preguntas || (data.metadata && data.metadata.preguntas) || [],
+        data.datos_crudos || []
+    );
     mostrarEstadisticas(data.estadisticas_descriptivas);
     mostrarFrecuencias(data.frecuencias);
     mostrarCorrelaciones(data.correlaciones);
@@ -558,50 +613,392 @@ function mostrarResultadosCuanti(data) {
     mostrarSatisfaccion(data.indice_satisfaccion);
 }
 
-function mostrarGraficos(graficos) {
+function mostrarAvisoPreguntasSinDatos(preguntasSinDatos) {
+    const cont = document.getElementById('avisoPreguntasSinDatos');
+    cont.innerHTML = '';
+    if (!preguntasSinDatos || preguntasSinDatos.length === 0) return;
+    const pids = preguntasSinDatos.map(id => 'P' + id).join(', ');
+    cont.innerHTML = `
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <strong>Preguntas sin datos (omitidas):</strong> ${pids}.
+            <br><small class="text-muted">No fueron respondidas por ningún encuestado.</small>
+        </div>`;
+}
+
+// ============================================
+// GRÁFICOS
+// ============================================
+function mostrarGraficos(graficos, preguntasMeta, datosCrudos) {
+    window.__datosCrudos = datosCrudos || [];
+    window.__metadata = { preguntas: preguntasMeta || [] };
+
     const container = document.getElementById('contenedorGraficos');
     container.innerHTML = '';
-    
-    const keys = Object.keys(graficos);
+
+    const keys = Object.keys(graficos || {});
     document.getElementById('badgeGraficos').textContent = keys.length;
-    
+
     if (keys.length === 0) {
         container.innerHTML = `
             <div class="col-12 text-center text-muted py-4">
-                <i class="bi bi-bar-chart" style="font-size: 4rem; color: #ccc;"></i>
+                <i class="bi bi-pie-chart" style="font-size: 4rem; color: #ccc;"></i>
                 <h4 class="mt-3">No se generaron gráficos</h4>
-            </div>
-        `;
+            </div>`;
         return;
     }
-    
+
     keys.forEach(key => {
         const g = graficos[key];
         const col = document.createElement('div');
-        col.className = 'col-md-6';
+        // ✅ ANCHO COMPLETO para cada gráfico
+        col.className = 'col-12';
+
+        const m = key.match(/^P(\d+)_pastel$/);
+        const drillDown = !!m;
+        const qid = m ? parseInt(m[1], 10) : null;
+        const tipo = 'pastel';
+
+        const divId = 'plotly_' + key.replace(/[^a-zA-Z0-9]/g, '_');
+
+        let contenidoHtml;
+        if (g.plotly_json) {
+            contenidoHtml = `
+                <div class="plotly-wrapper">
+                    <div id="${divId}" style="width:100%; min-height:720px;"></div>
+                </div>`;
+        } else if (g.base64) {
+            contenidoHtml = `
+                <img src="data:image/png;base64,${g.base64}" alt="${g.nombre}">`;
+        } else {
+            contenidoHtml = `
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-image" style="font-size:3rem;"></i>
+                    <p class="mt-2 mb-0">Gráfico no disponible</p>
+                </div>`;
+        }
+
+        const hint = drillDown
+            ? `<div class="grafico-hint"><i class="bi bi-hand-index-thumb"></i> Click en una porción para ver el detalle</div>`
+            : '';
+
         col.innerHTML = `
-            <div class="grafico-card">
+            <div class="grafico-card ${drillDown ? 'cursor-pointer' : ''}" data-qid="${qid || ''}" data-tipo="${tipo}">
                 <div class="grafico-titulo">
-                    <i class="bi bi-graph-up text-primary"></i> ${g.nombre}
+                    <i class="bi bi-pie-chart text-primary"></i> ${g.nombre}
                 </div>
-                <img src="data:image/png;base64,${g.base64}" 
-                     alt="${g.nombre}"
-                     onclick="abrirModalImagen('data:image/png;base64,${g.base64}', '${g.nombre}')">
-            </div>
-        `;
+                ${contenidoHtml}
+                ${hint}
+            </div>`;
         container.appendChild(col);
+
+        if (g.plotly_json) {
+            const el = document.getElementById(divId);
+            if (el && window.Plotly) {
+                const data = g.plotly_json.data || [];
+                const layout = g.plotly_json.layout || {};
+
+                // ✅ Forzar layout a ancho completo
+                layout.autosize = true;
+                layout.width = undefined;
+
+                window.Plotly.newPlot(
+                    el,
+                    data,
+                    layout,
+                    { responsive: true, displaylogo: false }
+                ).then(() => {
+                    el.dataset.tipo = tipo;
+                    el.dataset.qid = qid || '';
+                    if (drillDown) {
+                        bindDrilldown(el, qid, tipo);
+                    }
+                }).catch(err => {
+                    console.error('Error render Plotly:', key, err);
+                });
+            } else {
+                console.error('Plotly no está cargado o div no encontrado', divId);
+            }
+        }
     });
 }
 
+// ============================================
+// BIND CLICK en porción del pastel
+// ============================================
+function bindDrilldown(plotDiv, qid, tipo) {
+    if (!plotDiv || typeof plotDiv.on !== 'function') return;
+
+    if (!plotDiv.__coloresOriginales) {
+        plotDiv.__coloresOriginales = extraerColores(plotDiv, tipo);
+    }
+
+    plotDiv.on('plotly_click', function(evt) {
+        if (!evt.points || !evt.points.length) return;
+        const pt = evt.points[0];
+        const idx = pt.pointNumber;
+
+        let opcion = null;
+        if (tipo === 'pastel') {
+            opcion = pt.label;
+        } else {
+            const trace = plotDiv.data && plotDiv.data[0];
+            const orient = trace && trace.orientation === 'h' ? 'h' : 'v';
+            opcion = orient === 'h' ? pt.y : pt.x;
+        }
+        if (opcion === null || opcion === undefined) return;
+
+        if (String(opcion).startsWith('Otras (')) {
+            return;
+        }
+
+        resaltarEnGrafico(plotDiv, tipo, idx);
+        mostrarTarjetaSeleccion(plotDiv, qid, opcion, idx);
+    });
+}
+
+// ============================================
+// RESALTADO IN-PLACE
+// ============================================
+function extraerColores(plotDiv, tipo) {
+    const trace = plotDiv.data && plotDiv.data[0];
+    if (!trace) return [];
+
+    if (tipo === 'pastel') {
+        if (trace.marker && Array.isArray(trace.marker.colors)) {
+            return trace.marker.colors.slice();
+        }
+    }
+    return [];
+}
+
+function aColorAtenuado(color) {
+    if (typeof color === 'string' && color.length === 7 && color.startsWith('#')) {
+        return color + '40';
+    }
+    if (typeof color === 'string' && color.length === 9 && color.startsWith('#')) {
+        return color.substring(0, 7) + '40';
+    }
+    return 'rgba(200,200,200,0.35)';
+}
+
+function resaltarEnGrafico(plotDiv, tipo, selectedIdx) {
+    const originales = plotDiv.__coloresOriginales || [];
+    if (!originales.length) return;
+
+    const nuevos = originales.map((c, i) => {
+        return i === selectedIdx ? c : aColorAtenuado(c);
+    });
+
+    if (tipo === 'pastel') {
+        window.Plotly.restyle(plotDiv, { 'marker.colors': [nuevos] }, [0]);
+    }
+}
+
+function restaurarColores(plotDiv, tipo) {
+    const originales = plotDiv.__coloresOriginales;
+    if (!originales || !originales.length) return;
+
+    if (tipo === 'pastel') {
+        window.Plotly.restyle(plotDiv, { 'marker.colors': [originales] }, [0]);
+    }
+}
+
+// ============================================
+// TARJETA DE SELECCIÓN (inline)
+// ============================================
+function mostrarTarjetaSeleccion(plotDiv, qid, opcion, idx) {
+    const wrapper = plotDiv.closest('.grafico-card');
+    if (!wrapper) return;
+
+    const anterior = wrapper.querySelector('.tarjeta-seleccion');
+    if (anterior) anterior.remove();
+
+    const datos = window.__datosCrudos || [];
+    const total = datos.length;
+    const colQ = `P${qid}`;
+    const subset = datos.filter(r => String(r[colQ]) === String(opcion));
+    const pct = total > 0 ? ((subset.length / total) * 100).toFixed(1) : '0.0';
+
+    const metadata = window.__metadata || { preguntas: [] };
+    const otras = metadata.preguntas
+        .filter(p => String(p.id) !== String(qid) && p.opciones && p.opciones.length >= 2)
+        .sort((a, b) => (a.opciones.length) - (b.opciones.length))
+        .slice(0, 2);
+
+    let minitabla = '';
+    otras.forEach(p => {
+        const col = `P${p.id}`;
+        const conteo = {};
+        let n = 0;
+        subset.forEach(r => {
+            const v = r[col];
+            if (v === null || v === undefined || v === '') return;
+            const k = String(v);
+            conteo[k] = (conteo[k] || 0) + 1;
+            n++;
+        });
+        if (n === 0) return;
+        const top = Object.entries(conteo).sort((a, b) => b[1] - a[1]).slice(0, 3);
+        minitabla += `<div class="mini-preg">
+            <div class="mini-titulo"><span class="badge bg-secondary">P${p.id}</span> ${p.texto.substring(0, 55)}${p.texto.length > 55 ? '...' : ''}</div>`;
+        top.forEach(([op, cnt]) => {
+            const p2 = ((cnt / n) * 100).toFixed(1);
+            minitabla += `<div class="mini-fila">
+                <span class="mini-op">${op.substring(0, 40)}</span>
+                <span class="mini-val"><strong>${cnt}</strong> (${p2}%)</span>
+            </div>`;
+        });
+        minitabla += '</div>';
+    });
+
+    const tarjeta = document.createElement('div');
+    tarjeta.className = 'tarjeta-seleccion';
+    tarjeta.innerHTML = `
+        <div class="tarjeta-header">
+            <div>
+                <i class="bi bi-check-circle-fill text-success"></i>
+                <strong>Seleccionado:</strong> ${opcion}
+            </div>
+            <div class="tarjeta-stats">
+                <span class="badge bg-primary fs-6">${subset.length} / ${total}</span>
+                <span class="badge bg-success fs-6">${pct}%</span>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary btn-cerrar-tarjeta" title="Quitar selección">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        ${minitabla ? `<div class="tarjeta-body">${minitabla}</div>` : ''}
+        <div class="tarjeta-footer">
+            <button class="btn btn-sm btn-primary btn-ver-detalle">
+                <i class="bi bi-zoom-in"></i> Ver desglose completo
+            </button>
+        </div>
+    `;
+
+    wrapper.appendChild(tarjeta);
+
+    tarjeta.querySelector('.btn-cerrar-tarjeta').addEventListener('click', () => {
+        tarjeta.remove();
+        restaurarColores(plotDiv, plotDiv.dataset.tipo || 'pastel');
+    });
+    tarjeta.querySelector('.btn-ver-detalle').addEventListener('click', () => {
+        abrirDrilldown(qid, String(opcion));
+    });
+}
+
+// ============================================
+// DRILL-DOWN COMPLETO (modal)
+// ============================================
+function abrirDrilldown(qid, opcion) {
+    const datos = window.__datosCrudos || [];
+    const metadata = window.__metadata || { preguntas: [] };
+    const colQ = `P${qid}`;
+
+    const subset = datos.filter(r => String(r[colQ]) === String(opcion));
+    const total = datos.length;
+
+    if (total === 0) {
+        document.getElementById('drilldownResumen').innerHTML =
+            `<div class="alert alert-warning">Sin datos crudos disponibles.</div>`;
+        document.getElementById('drilldownContenido').innerHTML = '';
+        new bootstrap.Modal(document.getElementById('modalDrilldown')).show();
+        return;
+    }
+
+    const pregObj = metadata.preguntas.find(p => p.id === qid);
+    document.getElementById('drilldownTitulo').textContent = `P${qid} · ${opcion}`;
+
+    const pct = (subset.length / total * 100).toFixed(1);
+    document.getElementById('drilldownResumen').innerHTML = `
+        <div class="alert alert-info mb-0">
+            <div class="d-flex justify-content-between align-items-center flex-wrap">
+                <div>
+                    <div><strong>${subset.length}</strong> de <strong>${total}</strong>
+                    encuestados eligieron esta opción <strong>(${pct}%)</strong>.</div>
+                    ${pregObj ? `<small class="text-muted">${pregObj.texto}</small>` : ''}
+                </div>
+                <span class="badge bg-primary fs-6">${pct}%</span>
+            </div>
+        </div>`;
+
+    const cont = document.getElementById('drilldownContenido');
+    cont.innerHTML = '';
+
+    const otras = metadata.preguntas.filter(p => String(p.id) !== String(qid));
+    otras.sort((a, b) => (a.opciones?.length || 0) - (b.opciones?.length || 0));
+
+    let algunoMostrado = false;
+
+    otras.forEach(p => {
+        const col = `P${p.id}`;
+        const conteo = {};
+        let conResp = 0;
+
+        subset.forEach(r => {
+            const v = r[col];
+            if (v === null || v === undefined || v === '') return;
+            const k = String(v);
+            conteo[k] = (conteo[k] || 0) + 1;
+            conResp++;
+        });
+
+        if (conResp === 0) return;
+        algunoMostrado = true;
+
+        const ordenado = Object.entries(conteo).sort((a, b) => b[1] - a[1]);
+
+        const filas = ordenado.slice(0, 8).map(([op, n]) => {
+            const pctOp = (n / conResp * 100).toFixed(1);
+            const labelEsc = op.replace(/"/g, '&quot;').substring(0, 80);
+            return `
+                <div class="drilldown-bar">
+                    <div class="label" title="${labelEsc}">${labelEsc}</div>
+                    <div class="progress">
+                        <div class="progress-bar" style="width:${pctOp}%; background: linear-gradient(90deg, #9b59b6, #8e44ad);"></div>
+                    </div>
+                    <div class="valor"><strong>${n}</strong> (${pctOp}%)</div>
+                </div>`;
+        }).join('');
+
+        const restantes = ordenado.length > 8
+            ? `<div class="small text-muted mt-2">… y ${ordenado.length - 8} opciones más</div>`
+            : '';
+
+        const card = document.createElement('div');
+        card.className = 'drilldown-card';
+        card.innerHTML = `
+            <h6>
+                <span class="badge bg-secondary me-2">P${p.id}</span>
+                ${(p.texto || '').substring(0, 90)}
+            </h6>
+            <div class="small text-muted mb-2">Base: ${conResp} respuestas</div>
+            ${filas}
+            ${restantes}
+        `;
+        cont.appendChild(card);
+    });
+
+    if (!algunoMostrado) {
+        cont.innerHTML = `<div class="text-center text-muted py-4">
+            <i class="bi bi-inbox" style="font-size:3rem;"></i>
+            <p class="mt-2">No hay otras preguntas con respuestas en este subgrupo.</p>
+        </div>`;
+    }
+
+    new bootstrap.Modal(document.getElementById('modalDrilldown')).show();
+}
+
+// ============================================
+// TABLAS
+// ============================================
 function mostrarEstadisticas(estadisticas) {
     const tbody = document.getElementById('tbodyEstadisticas');
     tbody.innerHTML = '';
-    
     if (!estadisticas || estadisticas.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">No hay datos estadísticos disponibles</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">No hay datos</td></tr>';
         return;
     }
-    
     estadisticas.forEach(row => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -614,8 +1011,7 @@ function mostrarEstadisticas(estadisticas) {
             <td>${row.Min || '-'}</td>
             <td>${row.Max || '-'}</td>
             <td>${row.Q1 || '-'}</td>
-            <td>${row.Q3 || '-'}</td>
-        `;
+            <td>${row.Q3 || '-'}</td>`;
         tbody.appendChild(tr);
     });
 }
@@ -623,12 +1019,10 @@ function mostrarEstadisticas(estadisticas) {
 function mostrarFrecuencias(frecuencias) {
     const tbody = document.getElementById('tbodyFrecuencias');
     tbody.innerHTML = '';
-    
     if (!frecuencias || frecuencias.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">No hay frecuencias disponibles</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">No hay frecuencias</td></tr>';
         return;
     }
-    
     frecuencias.forEach(row => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -642,44 +1036,31 @@ function mostrarFrecuencias(frecuencias) {
                     </div>
                     <small>${row.Porcentaje}%</small>
                 </div>
-            </td>
-        `;
+            </td>`;
         tbody.appendChild(tr);
     });
 }
 
-// ============================================
-// CORRELACIONES (con aviso cuando no hay datos)
-// ============================================
 function mostrarCorrelaciones(corr) {
     const container = document.getElementById('contenedorCorrelaciones');
-    
-    if (!corr.pares_significativos || corr.pares_significativos.length === 0) {
+    if (!corr || !corr.pares_significativos || corr.pares_significativos.length === 0) {
         container.innerHTML = `
             <div class="aviso-vacio">
                 <i class="bi bi-link-45deg"></i>
                 <h4>No se encontraron correlaciones significativas</h4>
-                <p class="text-muted mb-0">
-                    Se necesitan <strong>al menos 2 preguntas numéricas</strong> 
-                    (Escala Likert, Sí/No o escalas ordenadas) para poder calcular correlaciones.
-                </p>
+                <p class="text-muted mb-0">Se necesitan al menos 2 preguntas numéricas.</p>
                 <div class="sugerencia">
-                    <strong>💡 Sugerencia:</strong>
-                    Incluye al menos 2 preguntas con escala de valoración 
-                    (por ejemplo: "Muy malo / Malo / Regular / Bueno / Muy bueno") 
-                    para poder analizar las relaciones entre ellas.
+                    <strong>💡 Sugerencia:</strong> Incluye al menos 2 preguntas con escala
+                    de valoración (Muy malo / Malo / Regular / Bueno / Muy bueno).
                 </div>
-            </div>
-        `;
+            </div>`;
         return;
     }
-    
     let html = '<div class="card card-custom"><div class="card-body">';
     corr.pares_significativos.forEach(par => {
         const absR = Math.abs(par.Correlacion);
         const clase = absR >= 0.7 ? 'fuerte' : (absR >= 0.5 ? 'moderada' : 'debil');
         const badge = absR >= 0.7 ? 'bg-danger' : (absR >= 0.5 ? 'bg-warning text-dark' : 'bg-secondary');
-        
         html += `
             <div class="correlacion-item ${clase}">
                 <div class="d-flex justify-content-between align-items-center">
@@ -691,163 +1072,102 @@ function mostrarCorrelaciones(corr) {
                     <span class="badge ${badge} fs-6">r = ${par.Correlacion}</span>
                 </div>
                 <small class="text-muted">${par.Interpretacion || ''}</small>
-            </div>
-        `;
+            </div>`;
     });
     html += '</div></div>';
     container.innerHTML = html;
 }
 
-// ============================================
-// GRUPOS (con aviso cuando no hay datos)
-// ============================================
 function mostrarGrupos(grupos) {
     const container = document.getElementById('contenedorGrupos');
-    
-    if (!grupos.resumen || grupos.resumen.length === 0) {
+    if (!grupos || !grupos.resumen || grupos.resumen.length === 0) {
         container.innerHTML = `
             <div class="aviso-vacio">
                 <i class="bi bi-people"></i>
                 <h4>No se puede mostrar el análisis por grupos</h4>
-                <p class="text-muted mb-0">
-                    Esta encuesta <strong>no contiene preguntas de tipo Sí/No</strong> 
-                    ni <strong>preguntas con pocas opciones</strong> (máximo 6) que 
-                    puedan usarse como criterio de agrupación.
-                </p>
-                <div class="sugerencia">
-                    <strong>💡 Sugerencia:</strong>
-                    Incluye al menos una pregunta como "Sexo", "Rango de edad" 
-                    o cualquier pregunta con opciones mutuamente excluyentes 
-                    para poder comparar los resultados entre grupos.
-                </div>
-            </div>
-        `;
+                <p class="text-muted mb-0">No hay preguntas de pocas opciones para agrupar.</p>
+            </div>`;
         return;
     }
-    
     let html = `
         <div class="alert alert-info">
             <i class="bi bi-info-circle"></i>
-            <strong>Grupo de comparación:</strong>
-            ${grupos.grupo_pregunta}
+            <strong>Grupo de comparación:</strong> ${grupos.grupo_pregunta}
         </div>
         <div class="card card-custom"><div class="card-body">
-        <div class="table-responsive">
-            <table class="table table-sm table-hover">
-                <thead class="table-dark">
-                    <tr>
-                        <th>Pregunta</th>
-                        <th>Grupo</th>
-                        <th>N</th>
-                        <th>Media</th>
-                        <th>Mediana</th>
-                        <th>Desv. Est.</th>
-                    </tr>
-                </thead>
-                <tbody>
-    `;
-    
+        <div class="table-responsive"><table class="table table-sm table-hover">
+            <thead class="table-dark"><tr>
+                <th>Pregunta</th><th>Grupo</th><th>N</th>
+                <th>Media</th><th>Mediana</th><th>Desv. Est.</th>
+            </tr></thead><tbody>`;
     grupos.resumen.forEach(row => {
-        html += `
-            <tr>
-                <td><small>${(row.Pregunta || '').substring(0, 50)}</small></td>
-                <td><span class="badge bg-secondary">${row.Grupo}</span></td>
-                <td>${row.N}</td>
-                <td><strong>${row.Media}</strong></td>
-                <td>${row.Mediana}</td>
-                <td>${row.Desv_Est}</td>
-            </tr>
-        `;
+        html += `<tr>
+            <td><small>${(row.Pregunta || '').substring(0, 50)}</small></td>
+            <td><span class="badge bg-secondary">${row.Grupo}</span></td>
+            <td>${row.N}</td><td><strong>${row.Media}</strong></td>
+            <td>${row.Mediana}</td><td>${row.Desv_Est}</td></tr>`;
     });
-    
     html += '</tbody></table></div></div></div>';
     container.innerHTML = html;
 }
 
-// ============================================
-// SATISFACCIÓN (con aviso cuando no hay datos)
-// ============================================
 function mostrarSatisfaccion(indice) {
     const container = document.getElementById('contenedorSatisfaccion');
-    
-    if (!indice.indice_global) {
+    if (!indice || !indice.indice_global) {
         container.innerHTML = `
             <div class="aviso-vacio">
                 <i class="bi bi-star"></i>
                 <h4>No se puede calcular el índice de satisfacción</h4>
-                <p class="text-muted mb-0">
-                    Esta encuesta <strong>no contiene preguntas de tipo Escala Likert</strong> 
-                    ni <strong>escalas ordenadas</strong> 
-                    (como "Muy bajo, Bajo, Medio, Alto, Muy Alto").
-                </p>
-                <div class="sugerencia">
-                    <strong>💡 Sugerencia:</strong>
-                    Incluye al menos una pregunta con escala de valoración 
-                    (por ejemplo: "¿Cómo calificas el servicio?" con opciones 
-                    "Muy malo / Malo / Regular / Bueno / Muy bueno") 
-                    para poder calcular el índice de satisfacción.
-                </div>
-            </div>
-        `;
+                <p class="text-muted mb-0">Se necesitan preguntas de escala ordenada.</p>
+            </div>`;
         return;
     }
-    
     const valor = indice.indice_global;
     const color = valor >= 70 ? '#2ecc71' : (valor >= 50 ? '#f39c12' : '#e74c3c');
     const badge = valor >= 70 ? 'bg-success' : (valor >= 50 ? 'bg-warning text-dark' : 'bg-danger');
     const texto = valor >= 70 ? '✅ Satisfactorio' : (valor >= 50 ? '⚠️ Neutral' : '❌ Necesita Mejora');
-    
+
     let html = `
         <div class="row g-3">
             <div class="col-md-4">
-                <div class="card card-custom h-100">
-                    <div class="card-body text-center">
-                        <h6 class="text-muted mb-3">Índice Global</h6>
-                        <div class="indice-circular" style="--valor: ${valor}; --color-indice: ${color};">
-                            <div class="indice-circular-inner">
-                                <div class="indice-valor">${valor}</div>
-                                <div class="indice-max">/ 100</div>
-                            </div>
+                <div class="card card-custom h-100"><div class="card-body text-center">
+                    <h6 class="text-muted mb-3">Índice Global</h6>
+                    <div class="indice-circular" style="--valor:${valor}; --color-indice:${color};">
+                        <div class="indice-circular-inner">
+                            <div class="indice-valor">${valor}</div>
+                            <div class="indice-max">/ 100</div>
                         </div>
-                        <p class="mt-3"><span class="badge ${badge} fs-6">${texto}</span></p>
                     </div>
-                </div>
+                    <p class="mt-3"><span class="badge ${badge} fs-6">${texto}</span></p>
+                </div></div>
             </div>
             <div class="col-md-8">
-                <div class="card card-custom h-100">
-                    <div class="card-body">
-                        <h6 class="mb-3">Índice por Pregunta</h6>
-                        <div class="table-responsive">
-                            <table class="table table-sm">
-                                <thead class="table-dark">
-                                    <tr><th>Pregunta</th><th>Índice</th><th>Min</th><th>Max</th></tr>
-                                </thead>
-                                <tbody>
-    `;
-    
+                <div class="card card-custom h-100"><div class="card-body">
+                    <h6 class="mb-3">Índice por Pregunta</h6>
+                    <div class="table-responsive"><table class="table table-sm">
+                        <thead class="table-dark">
+                            <tr><th>Pregunta</th><th>Índice</th><th>Min</th><th>Max</th></tr>
+                        </thead><tbody>`;
     (indice.por_pregunta || []).forEach(row => {
-        const colorBar = row.Indice_Promedio >= 70 ? 'bg-success' : (row.Indice_Promedio >= 50 ? 'bg-warning' : 'bg-danger');
-        html += `
-            <tr>
-                <td><small>${(row.Pregunta || '').substring(0, 55)}</small></td>
-                <td>
-                    <div class="d-flex align-items-center">
-                        <div class="progress flex-grow-1 me-2" style="height: 8px;">
-                            <div class="progress-bar ${colorBar}" style="width: ${row.Indice_Promedio}%"></div>
-                        </div>
-                        <strong>${row.Indice_Promedio}</strong>
-                    </div>
-                </td>
-                <td>${row.Min}</td>
-                <td>${row.Max}</td>
-            </tr>
-        `;
+        const colorBar = row.Indice_Promedio >= 70 ? 'bg-success'
+                       : (row.Indice_Promedio >= 50 ? 'bg-warning' : 'bg-danger');
+        html += `<tr>
+            <td><small>${(row.Pregunta || '').substring(0, 55)}</small></td>
+            <td><div class="d-flex align-items-center">
+                <div class="progress flex-grow-1 me-2" style="height: 8px;">
+                    <div class="progress-bar ${colorBar}" style="width:${row.Indice_Promedio}%"></div>
+                </div>
+                <strong>${row.Indice_Promedio}</strong>
+            </div></td>
+            <td>${row.Min}</td><td>${row.Max}</td></tr>`;
     });
-    
     html += '</tbody></table></div></div></div></div></div>';
     container.innerHTML = html;
 }
 
+// ============================================
+// UTIL
+// ============================================
 function reiniciarAnalisisCuanti() {
     document.getElementById('resultadosCuanti').classList.remove('show');
     document.getElementById('cardCarga').style.display = 'block';

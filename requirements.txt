@@ -38,6 +38,7 @@ matplotlib
 seaborn
 wordcloud
 plotly
+kaleido
 
 # ============================================
 # GENERACIÓN DE PDF

@@ -1,741 +1,603 @@
 # motor_cuantitativo/visualizador.py
 """
-Generador de gráficos para el análisis cuantitativo.
-Todos los gráficos se guardan como PNG de alta resolución.
-Compatible con matplotlib 3.9+ (tick_labels) y versiones anteriores (labels).
-Adapta automáticamente el tamaño según el número de opciones.
-Usa barras horizontales para preguntas con muchas opciones.
+Generador de gráficos con Plotly.
+- Devuelve: PNG (para PDF) + JSON plano (para renderizar en el navegador).
+- Omite automáticamente preguntas sin datos.
+- SOLO genera gráficos de PASTEL por pregunta (barras deshabilitadas).
+- Layout optimizado: leyenda debajo, ancho completo, título con wrap.
+- FIX doble para bdata: engine='json' + deserializador manual de respaldo.
 """
 
 import os
 import re
+import base64
+import json
 import unicodedata
-import matplotlib
-matplotlib.use('Agg')  # Backend sin GUI
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pandas as pd
-import numpy as np
 import logging
+
+import numpy as np
+import pandas as pd
+
+import plotly.express as px
+import plotly.graph_objects as go
+import plotly.io as pio
 
 logger = logging.getLogger(__name__)
 
-# Estilo consistente para todos los gráficos
-sns.set_style("whitegrid")
-plt.rcParams['figure.figsize'] = (12, 6)
-plt.rcParams['font.size'] = 10
-plt.rcParams['axes.titlesize'] = 12
-plt.rcParams['axes.titleweight'] = 'bold'
+# ============================================
+# ✅ FIX CRÍTICO: JSON plano en vez de bdata
+# ============================================
+pio.json.config.default_engine = 'json'
 
-# Paleta de colores consistente
-COLORES_POSITIVOS = ['#2ecc71', '#27ae60']
-COLORES_NEGATIVOS = ['#e74c3c', '#c0392b']
-COLORES_NEUTROS = ['#95a5a6', '#7f8c8d']
+
+# ============================================
+# CONFIGURACIÓN
+# ============================================
 COLORES_MIXTOS = [
     '#3498db', '#2ecc71', '#f39c12', '#e74c3c', '#9b59b6',
     '#1abc9c', '#e67e22', '#34495e', '#16a085', '#c0392b',
     '#27ae60', '#2980b9', '#8e44ad', '#d35400', '#f1c40f'
 ]
 
+PNG_WIDTH = 1100
+PNG_HEIGHT = 720
+PNG_SCALE = 2
 
+try:
+    pio.kaleido.scope.default_format = "png"
+except Exception:
+    pass
+
+
+# ============================================
+# HELPERS
+# ============================================
 def _limpiar_nombre(texto, max_length=40):
-    """Limpia un texto para usarlo en nombres de archivo."""
     if not texto:
         return "sin_nombre"
     texto = unicodedata.normalize('NFKD', str(texto))
     texto = texto.encode('ASCII', 'ignore').decode('ASCII')
     texto = re.sub(r'[^a-zA-Z0-9_-]', '_', texto)
-    texto = re.sub(r'_+', '_', texto)
-    texto = texto.strip('_')
+    texto = re.sub(r'_+', '_', texto).strip('_')
     if len(texto) > max_length:
         texto = texto[:max_length].rstrip('_')
-    return texto if texto else "sin_nombre"
+    return texto or "sin_nombre"
 
 
 def _preparar_directorio(directorio):
-    """Crea el directorio si no existe."""
     os.makedirs(directorio, exist_ok=True)
     return directorio
 
 
-def _colores_para_opciones(tipo, n_opciones, opciones=None):
-    """
-    Devuelve una lista de colores según el tipo de pregunta.
-    """
+def _colores_para_opciones(tipo, n):
     if tipo == 'escala_likert':
-        colores_likert = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#27ae60']
-        if n_opciones <= len(colores_likert):
-            return colores_likert[:n_opciones]
-        return COLORES_MIXTOS[:n_opciones]
-    
+        base = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#27ae60']
+        if n <= len(base):
+            return base[:n]
     elif tipo == 'seleccion_si_no':
-        return ['#2ecc71', '#e74c3c'][:n_opciones]
-    
-    # Para muchas opciones, ciclar la paleta
-    colores = []
-    for i in range(n_opciones):
-        colores.append(COLORES_MIXTOS[i % len(COLORES_MIXTOS)])
-    return colores
+        return ['#2ecc71', '#e74c3c'][:n]
+    return [COLORES_MIXTOS[i % len(COLORES_MIXTOS)] for i in range(n)]
+
+
+def _tiene_datos(df_frec):
+    if df_frec is None or df_frec.empty:
+        return False
+    return int(df_frec['Frecuencia'].sum()) > 0
+
+
+def _wrap_texto(texto, ancho=65):
+    """
+    Inserta <br> en un texto largo para que Plotly lo muestre en varias líneas.
+    Plotly NO hace wrap automático, hay que hacerlo manual.
+    """
+    if not texto:
+        return ""
+    palabras = str(texto).split()
+    lineas = []
+    actual = []
+    largo = 0
+    for palabra in palabras:
+        if largo + len(palabra) + 1 > ancho and actual:
+            lineas.append(' '.join(actual))
+            actual = [palabra]
+            largo = len(palabra)
+        else:
+            actual.append(palabra)
+            largo += len(palabra) + 1
+    if actual:
+        lineas.append(' '.join(actual))
+    return '<br>'.join(lineas)
+
+
+def _exportar(fig, ruta_png):
+    try:
+        fig.write_image(ruta_png, width=PNG_WIDTH, height=PNG_HEIGHT, scale=PNG_SCALE)
+        return True
+    except Exception as e:
+        logger.error(f"❌ kaleido no pudo exportar {ruta_png}: {e}")
+        logger.error("   → Verifica: pip install kaleido")
+        return False
 
 
 # ============================================
-# 1. GRÁFICO DE BARRAS POR PREGUNTA
+# ✅ DESERIALIZADOR DE bdata (respaldo)
 # ============================================
+def _desbdataificar(obj):
+    """
+    Recorre recursivamente un dict/list y reemplaza cualquier
+    {'dtype': 'i8', 'bdata': 'CgAAAA...'} por una lista Python normal.
 
-def grafico_barras_pregunta(pregunta, frecuencias, directorio, nombre_base):
+    Esto es respaldo por si engine='json' no se aplica por algún motivo.
     """
-    Genera un gráfico de barras con las frecuencias de cada opción.
-    - <= 10 opciones: barras VERTICALES
-    - > 10 opciones: barras HORIZONTALES (más legibles)
-    """
-    n_opciones = len(frecuencias)
-    
-    # ✅ SI HAY MUCHAS OPCIONES, USAR BARRAS HORIZONTALES
-    if n_opciones > 10:
-        return _grafico_barras_horizontales(pregunta, frecuencias, directorio, nombre_base)
-    
-    # ============================================
-    # BARRAS VERTICALES (pocas opciones)
-    # ============================================
-    if n_opciones <= 5:
-        figsize = (10, 6)
-        fontsize_etiquetas = 11
-        rotacion = 0
-    else:  # 6-10
-        figsize = (11, 6)
-        fontsize_etiquetas = 10
-        rotacion = 30
-    
-    fig, ax = plt.subplots(figsize=figsize)
-    
-    opciones = frecuencias['Opcion'].tolist()
-    valores = frecuencias['Frecuencia'].tolist()
-    porcentajes = frecuencias['Porcentaje'].tolist()
-    
-    opciones_cortas = [
-        (o[:35] + '...') if len(o) > 35 else o
-        for o in opciones
-    ]
-    
-    colores = _colores_para_opciones(pregunta['tipo'], len(opciones), opciones)
-    barras = ax.bar(range(len(opciones)), valores, color=colores, edgecolor='white', linewidth=2)
-    
-    fontsize_valor = 10
-    for barra, valor, pct in zip(barras, valores, porcentajes):
-        height = barra.get_height()
-        ax.text(
-            barra.get_x() + barra.get_width() / 2,
-            height + 0.3,
-            f'{valor}\n({pct}%)',
-            ha='center', va='bottom',
-            fontsize=fontsize_valor, fontweight='bold'
-        )
-    
-    ax.set_xticks(range(len(opciones)))
-    ax.set_xticklabels(
-        opciones_cortas,
-        rotation=rotacion,
-        ha='right' if rotacion > 0 else 'center',
-        fontsize=fontsize_etiquetas
-    )
-    ax.set_ylabel('Frecuencia', fontweight='bold')
-    ax.set_title(f"Distribución de respuestas\n{pregunta['texto'][:70]}", pad=15, fontsize=12)
-    
-    if max(valores) > 0:
-        ax.set_ylim(0, max(valores) * 1.18)
-    
-    plt.tight_layout()
-    
-    nombre_archivo = f"{nombre_base}_barras.png"
-    ruta = os.path.join(directorio, nombre_archivo)
-    plt.savefig(ruta, dpi=130, bbox_inches='tight', facecolor='white')
-    plt.close()
-    
-    logger.info(f"  📊 Barras verticales: {nombre_archivo} ({n_opciones} opciones)")
-    return ruta
+    if isinstance(obj, dict):
+        # ¿Es un bdata?
+        if 'bdata' in obj and 'dtype' in obj:
+            try:
+                raw = base64.b64decode(obj['bdata'])
+                dt = obj.get('dtype', 'i8')
+                # Mapear dtype abreviado a numpy
+                dtype_map = {
+                    'i1': 'int8', 'i2': 'int16', 'i4': 'int32', 'i8': 'int64',
+                    'u1': 'uint8', 'u2': 'uint16', 'u4': 'uint32', 'u8': 'uint64',
+                    'f4': 'float32', 'f8': 'float64',
+                }
+                np_dtype = dtype_map.get(dt, dt)
+                arr = np.frombuffer(raw, dtype=np_dtype)
+                if obj.get('shape'):
+                    try:
+                        arr = arr.reshape(obj['shape'])
+                    except Exception:
+                        pass
+                return arr.tolist()
+            except Exception as e:
+                logger.warning(f"bdata no decodificable: {e}")
+                return []
+        return {k: _desbdataificar(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_desbdataificar(x) for x in obj]
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.floating,)):
+        f = float(obj)
+        return None if (np.isnan(f) or np.isinf(f)) else f
+    return obj
 
 
-def _grafico_barras_horizontales(pregunta, frecuencias, directorio, nombre_base):
+def _fig_a_resultado(fig, ruta_png):
     """
-    ✅ NUEVO: Barras HORIZONTALES para preguntas con muchas opciones.
-    Es mucho más legible y permite etiquetas largas.
+    Exporta PNG y devuelve {png, plotly_json}.
+    plotly_json es un dict JSON-safe con {'data': [...], 'layout': {...}}.
+
+    Doble seguridad contra bdata:
+      1) engine='json'
+      2) _desbdataificar() si algo se coló
     """
-    n_opciones = len(frecuencias)
-    
-    # ✅ Ordenar por frecuencia ascendente (más común arriba en gráfico)
-    df_ordenado = frecuencias.sort_values('Frecuencia', ascending=True).reset_index(drop=True)
-    
-    opciones = df_ordenado['Opcion'].tolist()
-    valores = df_ordenado['Frecuencia'].tolist()
-    porcentajes = df_ordenado['Porcentaje'].tolist()
-    
-    # ✅ Altura adaptativa: ~0.4cm por opción, mín 8, máx 20
-    altura = max(8, min(20, n_opciones * 0.4 + 3))
-    
-    fig, ax = plt.subplots(figsize=(12, altura))
-    
-    # ✅ Truncar etiquetas largas
-    opciones_cortas = [
-        (o[:45] + '...') if len(o) > 45 else o
-        for o in opciones
-    ]
-    
-    colores = _colores_para_opciones(pregunta['tipo'], len(opciones), opciones)
-    
-    # ✅ Barras horizontales
-    y_pos = range(len(opciones))
-    barras = ax.barh(y_pos, valores, color=colores, edgecolor='white', linewidth=1.5)
-    
-    # ✅ Etiquetas a la derecha de cada barra
-    max_valor = max(valores) if valores else 1
-    for barra, valor, pct in zip(barras, valores, porcentajes):
-        ax.text(
-            valor + max_valor * 0.01,
-            barra.get_y() + barra.get_height() / 2,
-            f'{valor} ({pct}%)',
-            va='center', ha='left',
-            fontsize=9, fontweight='bold'
-        )
-    
-    ax.set_yticks(y_pos)
-    ax.set_yticklabels(opciones_cortas, fontsize=9)
-    ax.set_xlabel('Frecuencia', fontweight='bold')
-    ax.set_title(
-        f"Distribución de respuestas ({n_opciones} opciones)\n{pregunta['texto'][:70]}",
-        pad=15, fontsize=12
-    )
-    ax.set_xlim(0, max_valor * 1.2)
-    ax.grid(True, axis='x', alpha=0.3)
-    
-    plt.tight_layout()
-    
-    nombre_archivo = f"{nombre_base}_barras.png"
-    ruta = os.path.join(directorio, nombre_archivo)
-    plt.savefig(ruta, dpi=130, bbox_inches='tight', facecolor='white')
-    plt.close()
-    
-    logger.info(f"  📊 Barras horizontales: {nombre_archivo} ({n_opciones} opciones)")
-    return ruta
+    exito = _exportar(fig, ruta_png)
+    plotly_json = None
+    try:
+        plotly_json = json.loads(fig.to_json(engine='json'))
+        plotly_json = _desbdataificar(plotly_json)
+    except Exception as e:
+        logger.warning(f"No se pudo serializar figura a JSON: {e}")
+
+    return {
+        'png': ruta_png if exito else None,
+        'plotly_json': plotly_json,
+    }
 
 
 # ============================================
-# 2. GRÁFICO DE PASTEL
+# 1. PASTEL (único gráfico por pregunta)
 # ============================================
-
 def grafico_pastel_pregunta(pregunta, frecuencias, directorio, nombre_base):
     """
-    Genera un gráfico de pastel con la distribución porcentual.
-    Si hay muchas opciones, agrupa las menores en "Otras".
+    Gráfico de pastel con la distribución porcentual.
+    - Leyenda DEBAJO para no comerse el ancho.
+    - Título con wrap manual (Plotly no lo hace solo).
+    - Si hay > 8 opciones, agrupa las menores en "Otras (N categorías)".
     """
-    # Filtrar opciones con frecuencia > 0
     df = frecuencias[frecuencias['Frecuencia'] > 0].copy()
-    
-    if len(df) == 0:
+
+    if df.empty:
         return None
-    
-    if len(df) == 1:
-        return grafico_barras_pregunta(pregunta, frecuencias, directorio, nombre_base)
-    
-    n_opciones_originales = len(df)
-    
-    # ✅ SI HAY MÁS DE 8 OPCIONES, AGRUPAR LAS MENORES EN "OTRAS"
-    if n_opciones_originales > 8:
+
+    n_originales = len(df)
+
+    # Agrupar si son demasiadas
+    if n_originales > 8:
         df = df.sort_values('Frecuencia', ascending=False)
-        
-        top_df = df.head(7).copy()
-        resto_df = df.iloc[7:]
-        
-        frecuencia_otras = resto_df['Frecuencia'].sum()
-        porcentaje_otras = resto_df['Porcentaje'].sum()
-        
-        if frecuencia_otras > 0:
-            nueva_fila = pd.DataFrame([{
-                'Opcion': f'Otras ({len(resto_df)} categorías)',
-                'Frecuencia': frecuencia_otras,
-                'Porcentaje': round(porcentaje_otras, 2)
-            }])
-            df = pd.concat([top_df, nueva_fila], ignore_index=True)
-    
-    # ✅ ADAPTAR TAMAÑO SEGÚN N° DE OPCIONES MOSTRADAS
-    n_final = len(df)
-    if n_final <= 4:
-        figsize = (9, 7)
-    elif n_final <= 6:
-        figsize = (10, 8)
-    else:
-        figsize = (12, 9)
-    
-    fig, ax = plt.subplots(figsize=figsize)
-    
-    opciones = df['Opcion'].tolist()
-    valores = df['Frecuencia'].tolist()
-    
-    # ✅ TRUNCAR ETIQUETAS LARGAS
-    opciones_cortas = [
-        (o[:40] + '...') if len(o) > 40 else o
-        for o in opciones
-    ]
-    
-    colores = _colores_para_opciones(pregunta['tipo'], len(opciones), opciones)
-    
-    wedges, texts, autotexts = ax.pie(
-        valores,
-        labels=None,
-        colors=colores,
-        autopct=lambda pct: f'{pct:.1f}%' if pct >= 3 else '',
-        startangle=90,
-        counterclock=False,
-        wedgeprops={'edgecolor': 'white', 'linewidth': 2},
-        textprops={'fontsize': 10, 'fontweight': 'bold'}
+        top = df.head(7).copy()
+        resto = df.iloc[7:]
+        if not resto.empty:
+            top = pd.concat([
+                top,
+                pd.DataFrame([{
+                    'Opcion': f'Otras ({len(resto)} categorías)',
+                    'Frecuencia': int(resto['Frecuencia'].sum()),
+                    'Porcentaje': round(float(resto['Porcentaje'].sum()), 2),
+                }])
+            ], ignore_index=True)
+        df = top
+
+    colores = _colores_para_opciones(pregunta['tipo'], len(df))
+    labels = df['Opcion'].astype(str).tolist()
+    values = df['Frecuencia'].astype(int).tolist()
+
+    # Título con wrap
+    titulo_raw = f"P{pregunta['id']} · {pregunta['texto']}"
+    if n_originales > 8:
+        titulo_raw += f" (agrupado de {n_originales} opciones)"
+    titulo_wrap = _wrap_texto(titulo_raw, ancho=70)
+
+    # ✅ Usar go.Pie con listas puras para garantizar serialización
+    fig = go.Figure(data=[go.Pie(
+        labels=labels,
+        values=values,
+        marker=dict(
+            colors=colores,
+            line=dict(color='white', width=2),
+        ),
+        textinfo='percent',
+        textposition='inside',
+        textfont=dict(size=13, color='white', family='DejaVu Sans'),
+        insidetextorientation='horizontal',
+        sort=False,
+        direction='clockwise',
+        hole=0.0,
+    )])
+
+    fig.update_layout(
+        title=dict(
+            text=titulo_wrap,
+            x=0.5,
+            xanchor='center',
+            font=dict(size=14),
+        ),
+        font=dict(family="DejaVu Sans, Arial, sans-serif", size=11),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        height=720,
+        margin=dict(l=40, r=40, t=120, b=180),
+        showlegend=True,
+        legend=dict(
+            orientation='h',
+            yanchor='top',
+            y=-0.05,
+            xanchor='center',
+            x=0.5,
+            font=dict(size=11),
+            itemsizing='constant',
+        ),
     )
-    
-    # ✅ LEYENDA CON ETIQUETAS CORTAS
-    etiquetas = [f'{op} ({val})' for op, val in zip(opciones_cortas, valores)]
-    ax.legend(
-        wedges, etiquetas,
-        loc='center left',
-        bbox_to_anchor=(1, 0, 0.5, 1),
-        fontsize=9 if n_final > 6 else 10
-    )
-    
-    titulo_extra = f" (agrupado de {n_opciones_originales} opciones)" if n_opciones_originales > 8 else ""
-    ax.set_title(f"Distribución porcentual{titulo_extra}\n{pregunta['texto'][:70]}", pad=15, fontsize=12)
-    ax.axis('equal')
-    
-    plt.tight_layout()
-    
-    nombre_archivo = f"{nombre_base}_pastel.png"
-    ruta = os.path.join(directorio, nombre_archivo)
-    plt.savefig(ruta, dpi=130, bbox_inches='tight', facecolor='white')
-    plt.close()
-    
-    logger.info(f"  🥧 Pastel: {nombre_archivo} ({n_opciones_originales}→{n_final} opciones)")
-    return ruta
+
+    ruta = os.path.join(directorio, f"{nombre_base}_pastel.png")
+    logger.info(f"  🥧 Pastel: {os.path.basename(ruta)} ({n_originales}→{len(df)})")
+    return _fig_a_resultado(fig, ruta)
 
 
 # ============================================
-# 3. HISTOGRAMA DE LIKERT
+# 2. HISTOGRAMA LIKERT (solo si hay Likert)
 # ============================================
-
 def grafico_histograma_likert(pregunta, valores_numericos, directorio, nombre_base):
-    """
-    Genera un histograma de valores Likert con curva de densidad.
-    """
-    valores = valores_numericos.dropna().values
-    
-    if len(valores) == 0:
+    valores = pd.to_numeric(valores_numericos, errors='coerce').dropna()
+    if valores.empty:
         return None
-    
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    # Histograma
-    bins = np.arange(valores.min() - 0.5, valores.max() + 1.5, 1)
-    n, bins_edges, patches = ax.hist(
-        valores,
-        bins=bins,
-        color='#3498db',
-        edgecolor='white',
-        linewidth=2,
-        alpha=0.75,
-        density=False
+
+    media = float(valores.mean())
+    mediana = float(valores.median())
+
+    fig = go.Figure()
+    fig.add_trace(go.Histogram(
+        x=valores.tolist(),
+        nbinsx=int(valores.max() - valores.min()) + 1,
+        marker=dict(color='#3498db', line=dict(color='white', width=2)),
+        name='Frecuencia',
+    ))
+    fig.add_vline(
+        x=media, line_dash="dash", line_color="#e67e22",
+        annotation_text=f"Media: {media:.2f}",
+        annotation_position="top right",
     )
-    
-    # Colorear barras según posición en la escala
-    max_val = valores.max()
-    for i, patch in enumerate(patches):
-        valor_centro = (bins_edges[i] + bins_edges[i+1]) / 2
-        if valor_centro <= max_val * 0.4:
-            patch.set_facecolor('#e74c3c')
-        elif valor_centro <= max_val * 0.6:
-            patch.set_facecolor('#f1c40f')
-        else:
-            patch.set_facecolor('#2ecc71')
-    
-    # Líneas de media y mediana
-    media = valores.mean()
-    mediana = np.median(valores)
-    
-    ax.axvline(media, color='#e67e22', linestyle='--', linewidth=2, label=f'Media: {media:.2f}')
-    ax.axvline(mediana, color='#9b59b6', linestyle='--', linewidth=2, label=f'Mediana: {mediana:.2f}')
-    
-    ax.set_xlabel('Valor (escala Likert)', fontweight='bold')
-    ax.set_ylabel('Frecuencia', fontweight='bold')
-    ax.set_title(f"Distribución de respuestas Likert\n{pregunta['texto'][:70]}", pad=15, fontsize=12)
-    ax.legend()
-    
-    plt.tight_layout()
-    
-    nombre_archivo = f"{nombre_base}_histograma.png"
-    ruta = os.path.join(directorio, nombre_archivo)
-    plt.savefig(ruta, dpi=130, bbox_inches='tight', facecolor='white')
-    plt.close()
-    
-    logger.info(f"  📈 Histograma: {nombre_archivo}")
-    return ruta
+    fig.add_vline(
+        x=mediana, line_dash="dash", line_color="#9b59b6",
+        annotation_text=f"Mediana: {mediana:.2f}",
+        annotation_position="bottom right",
+    )
+
+    titulo = f"P{pregunta['id']} · Distribución Likert<br>{_wrap_texto(pregunta['texto'], 70)}"
+    fig.update_layout(
+        title=dict(text=titulo, x=0.5, xanchor='center', font=dict(size=14)),
+        font=dict(family="DejaVu Sans, Arial, sans-serif", size=11),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        height=620,
+        margin=dict(l=70, r=40, t=120, b=80),
+        xaxis_title="Valor",
+        yaxis_title="Frecuencia",
+        showlegend=False,
+        bargap=0.15,
+    )
+
+    ruta = os.path.join(directorio, f"{nombre_base}_histograma.png")
+    logger.info(f"  📈 Histograma: {os.path.basename(ruta)}")
+    return _fig_a_resultado(fig, ruta)
 
 
 # ============================================
-# 4. BOXPLOT DE PREGUNTAS LIKERT
+# 3. BOXPLOT LIKERT
 # ============================================
-
-def grafico_boxplot_likert(df_numerico, metadata, directorio, nombre_archivo='boxplot_likert.png'):
-    """
-    Boxplot comparativo de todas las preguntas Likert.
-    Compatible con matplotlib 3.9+ (tick_labels) y versiones anteriores (labels).
-    """
-    preguntas_likert = [p for p in metadata['preguntas'] if p['tipo'] == 'escala_likert']
-    
-    if len(preguntas_likert) < 2:
+def grafico_boxplot_likert(df_numerico, metadata, directorio,
+                            nombre_archivo='boxplot_likert.png'):
+    preguntas = [p for p in metadata['preguntas'] if p['tipo'] == 'escala_likert']
+    if len(preguntas) < 2:
         return None
-    
-    # Preparar datos
+
     datos = []
     etiquetas = []
-    for p in preguntas_likert:
+    for p in preguntas:
         col = f"P{p['id']}"
         if col not in df_numerico.columns:
             continue
-        valores = pd.to_numeric(df_numerico[col], errors='coerce').dropna()
-        if len(valores) > 0:
-            datos.append(valores.values)
-            etq = p['texto'][:35] + '...' if len(p['texto']) > 35 else p['texto']
-            etiquetas.append(etq)
-    
-    if not datos:
+        v = pd.to_numeric(df_numerico[col], errors='coerce').dropna()
+        if len(v) > 0:
+            datos.append(v.tolist())
+            etiquetas.append(p['texto'][:40] + ('...' if len(p['texto']) > 40 else ''))
+
+    if len(datos) < 2:
         return None
-    
-    fig, ax = plt.subplots(figsize=(12, 7))
-    
-    # ✅ COMPATIBILIDAD CON MATPLOTLIB 3.9+ (tick_labels) Y VERSIONES ANTIGUAS (labels)
-    try:
-        bp = ax.boxplot(
-            datos,
-            tick_labels=etiquetas,
-            patch_artist=True,
-            notch=False,
-            showmeans=True,
-            meanprops={'marker': 'D', 'markerfacecolor': 'white', 'markeredgecolor': 'black', 'markersize': 8}
-        )
-    except TypeError:
-        bp = ax.boxplot(
-            datos,
-            labels=etiquetas,
-            patch_artist=True,
-            notch=False,
-            showmeans=True,
-            meanprops={'marker': 'D', 'markerfacecolor': 'white', 'markeredgecolor': 'black', 'markersize': 8}
-        )
-    
-    # Colores consistentes
-    colores = ['#3498db', '#2ecc71', '#f39c12', '#e74c3c', '#9b59b6', '#1abc9c']
-    for patch, color in zip(bp['boxes'], colores):
-        patch.set_facecolor(color)
-        patch.set_alpha(0.7)
-    
-    ax.set_ylabel('Valor Likert', fontweight='bold')
-    ax.set_title('Comparación de respuestas Likert entre preguntas', pad=15, fontsize=12)
-    ax.grid(True, axis='y', alpha=0.3)
-    
-    plt.xticks(rotation=15, ha='right')
-    plt.tight_layout()
-    
-    ruta = os.path.join(directorio, nombre_archivo)
-    plt.savefig(ruta, dpi=130, bbox_inches='tight', facecolor='white')
-    plt.close()
-    
-    logger.info(f"  📦 Boxplot: {nombre_archivo}")
-    return ruta
 
+    fig = go.Figure()
+    for i, (vals, etq) in enumerate(zip(datos, etiquetas)):
+        fig.add_trace(go.Box(
+            y=vals, name=etq,
+            marker_color=COLORES_MIXTOS[i % len(COLORES_MIXTOS)],
+            boxmean='sd',
+        ))
 
-# ============================================
-# 5. MAPA DE CALOR DE CORRELACIONES
-# ============================================
-
-def grafico_heatmap_correlaciones(matriz_corr, directorio, nombre_archivo='heatmap_correlaciones.png'):
-    """
-    Genera un mapa de calor con la matriz de correlaciones.
-    Se adapta al número de preguntas.
-    """
-    if matriz_corr.empty or len(matriz_corr) < 2:
-        return None
-    
-    n = len(matriz_corr)
-    # ✅ ADAPTAR TAMAÑO SEGÚN N° DE PREGUNTAS
-    tamaño = max(10, min(20, n * 0.8 + 4))
-    
-    fig, ax = plt.subplots(figsize=(tamaño, tamaño * 0.85))
-    
-    mask = np.triu(np.ones_like(matriz_corr, dtype=bool), k=1)
-    
-    fontsize_annot = max(7, min(11, 14 - n // 2))
-    
-    sns.heatmap(
-        matriz_corr,
-        mask=mask,
-        annot=True,
-        fmt='.2f',
-        cmap='RdYlGn',
-        center=0,
-        vmin=-1,
-        vmax=1,
-        square=True,
-        linewidths=1,
-        cbar_kws={'shrink': 0.8, 'label': 'Correlación de Spearman'},
-        ax=ax,
-        annot_kws={'fontsize': fontsize_annot, 'fontweight': 'bold'}
+    fig.update_layout(
+        title=dict(text='Comparación Likert entre preguntas',
+                   x=0.5, xanchor='center', font=dict(size=14)),
+        font=dict(family="DejaVu Sans, Arial, sans-serif", size=11),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        height=620,
+        margin=dict(l=70, r=40, t=120, b=140),
+        showlegend=False,
     )
-    
-    ax.set_title('Matriz de correlaciones entre preguntas', pad=20, fontsize=13, fontweight='bold')
-    plt.xticks(rotation=45, ha='right', fontsize=9)
-    plt.yticks(rotation=0, fontsize=9)
-    
-    plt.tight_layout()
-    
+
     ruta = os.path.join(directorio, nombre_archivo)
-    plt.savefig(ruta, dpi=130, bbox_inches='tight', facecolor='white')
-    plt.close()
-    
-    logger.info(f"  🔥 Heatmap: {nombre_archivo}")
-    return ruta
+    logger.info(f"  📦 Boxplot: {nombre_archivo}")
+    return _fig_a_resultado(fig, ruta)
 
 
 # ============================================
-# 6. GRÁFICO DE BARRAS APILADAS (COMPARATIVA)
+# 4. HEATMAP CORRELACIONES
 # ============================================
-
-def grafico_barras_apiladas_comparativa(frecuencias_df, metadata, directorio, nombre_archivo='barras_apiladas_comparativa.png'):
-    """
-    Barras apiladas 100% comparando todas las preguntas Likert.
-    """
-    preguntas_likert = [p for p in metadata['preguntas'] if p['tipo'] == 'escala_likert']
-    
-    if len(preguntas_likert) < 2:
+def grafico_heatmap_correlaciones(matriz, directorio,
+                                   nombre_archivo='heatmap_correlaciones.png'):
+    if matriz is None or matriz.empty or len(matriz) < 2:
         return None
-    
-    datos = {}
-    for p in preguntas_likert:
+
+    fig = px.imshow(
+        matriz,
+        color_continuous_scale='RdYlGn',
+        zmin=-1, zmax=1,
+        text_auto='.2f',
+        aspect='auto',
+    )
+    fig.update_traces(textfont=dict(size=10))
+
+    fig.update_layout(
+        title=dict(text='Matriz de correlaciones (Spearman)',
+                   x=0.5, xanchor='center', font=dict(size=14)),
+        font=dict(family="DejaVu Sans, Arial, sans-serif", size=11),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        height=620,
+        margin=dict(l=70, r=40, t=120, b=180),
+        xaxis=dict(tickangle=-35, tickfont=dict(size=9)),
+        yaxis=dict(tickfont=dict(size=9)),
+        coloraxis_colorbar=dict(title="r"),
+    )
+
+    ruta = os.path.join(directorio, nombre_archivo)
+    logger.info(f"  🔥 Heatmap: {nombre_archivo}")
+    return _fig_a_resultado(fig, ruta)
+
+
+# ============================================
+# 5. BARRAS APILADAS
+# ============================================
+def grafico_barras_apiladas_comparativa(frecuencias_df, metadata, directorio,
+                                         nombre_archivo='barras_apiladas_comparativa.png'):
+    preguntas = [p for p in metadata['preguntas'] if p['tipo'] == 'escala_likert']
+    if len(preguntas) < 2:
+        return None
+
+    filas = []
+    for p in preguntas:
         df_p = frecuencias_df[frecuencias_df['Pregunta_ID'] == p['id']]
         if df_p.empty:
             continue
-        
-        opciones = df_p['Opcion'].tolist()
-        porcentajes = df_p['Porcentaje'].tolist()
-        
-        etq = p['texto'][:40] + '...' if len(p['texto']) > 40 else p['texto']
-        datos[etq] = dict(zip(opciones, porcentajes))
-    
-    if not datos:
+        for _, row in df_p.iterrows():
+            filas.append({
+                'Pregunta': p['texto'][:45],
+                'Opcion': row['Opcion'],
+                'Porcentaje': row['Porcentaje'],
+            })
+
+    if not filas:
         return None
-    
-    df_plot = pd.DataFrame(datos).T.fillna(0)
-    
-    n_preguntas = len(df_plot)
-    altura = max(6, min(14, n_preguntas * 0.8 + 3))
-    
-    fig, ax = plt.subplots(figsize=(12, altura))
-    
-    colores = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#27ae60']
-    
-    df_plot.plot(
-        kind='barh',
-        stacked=True,
-        color=colores[:len(df_plot.columns)],
-        ax=ax,
-        edgecolor='white',
-        linewidth=1
+
+    df = pd.DataFrame(filas)
+    fig = px.bar(
+        df, x='Porcentaje', y='Pregunta', color='Opcion',
+        orientation='h',
+        color_discrete_sequence=['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#27ae60'],
     )
-    
-    ax.set_xlabel('Porcentaje (%)', fontweight='bold')
-    ax.set_title('Comparación 100% apilado de preguntas Likert', pad=15, fontsize=12)
-    ax.legend(title='Respuesta', bbox_to_anchor=(1.02, 1), loc='upper left', fontsize=9)
-    ax.set_xlim(0, 100)
-    ax.grid(True, axis='x', alpha=0.3)
-    
-    plt.tight_layout()
-    
+    fig.update_layout(barmode='stack')
+
+    fig.update_layout(
+        title=dict(text='Comparación Likert (100% apilado)',
+                   x=0.5, xanchor='center', font=dict(size=14)),
+        font=dict(family="DejaVu Sans, Arial, sans-serif", size=11),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        height=max(500, len(df['Pregunta'].unique()) * 80),
+        margin=dict(l=280, r=180, t=120, b=60),
+        xaxis_title='Porcentaje (%)',
+        legend=dict(orientation='v', x=1.02, y=1, xanchor='left'),
+    )
+
     ruta = os.path.join(directorio, nombre_archivo)
-    plt.savefig(ruta, dpi=130, bbox_inches='tight', facecolor='white')
-    plt.close()
-    
-    logger.info(f"  📊 Barras apiladas: {nombre_archivo}")
-    return ruta
+    logger.info(f"  📊 Apiladas: {nombre_archivo}")
+    return _fig_a_resultado(fig, ruta)
 
 
 # ============================================
-# 7. GRÁFICO DE COMPARACIÓN ENTRE GRUPOS
+# 6. COMPARACIÓN GRUPOS
 # ============================================
+def grafico_comparacion_grupos(df_comparacion, pregunta_grupo, directorio,
+                                nombre_archivo='comparacion_grupos.png'):
+    if df_comparacion is None or df_comparacion.empty:
+        return None
 
-def grafico_comparacion_grupos(df_comparacion, pregunta_grupo, directorio, nombre_archivo='comparacion_grupos.png'):
-    """
-    Barras agrupadas comparando las medias por grupo.
-    Corregido: fuerza conversión a numérico antes del groupby.
-    """
-    if df_comparacion.empty:
+    cols = [c for c in df_comparacion.columns
+            if c.startswith('P') and c not in ('Grupo', 'Identificador')]
+    if not cols:
         return None
-    
-    columnas_preguntas = [
-        c for c in df_comparacion.columns 
-        if c.startswith('P') and c not in ['Grupo', 'Identificador']
-    ]
-    
-    if not columnas_preguntas:
-        return None
-    
-    # ✅ FORZAR CONVERSIÓN A NUMÉRICO
-    df_num = df_comparacion[['Grupo']].copy()
-    for col in columnas_preguntas:
-        df_num[col] = pd.to_numeric(df_comparacion[col], errors='coerce')
-    
-    columnas_validas = [c for c in columnas_preguntas if df_num[c].notna().sum() > 0]
-    
-    if not columnas_validas:
-        logger.warning("  ⚠️ No hay columnas numéricas válidas para comparar grupos")
-        return None
-    
-    medias = df_num.groupby('Grupo')[columnas_validas].mean()
-    
+
+    df = df_comparacion[['Grupo']].copy()
+    for c in cols:
+        df[c] = pd.to_numeric(df_comparacion[c], errors='coerce')
+
+    medias = df.groupby('Grupo')[cols].mean().reset_index()
     if medias.empty:
         return None
-    
-    n_preguntas = len(columnas_validas)
-    ancho = max(10, min(16, n_preguntas * 1.2 + 4))
-    
-    fig, ax = plt.subplots(figsize=(ancho, 7))
-    
-    medias.T.plot(
-        kind='bar',
-        ax=ax,
-        color=COLORES_MIXTOS[:len(medias)],
-        edgecolor='white',
-        linewidth=1.5
+
+    largo = medias.melt(id_vars='Grupo', var_name='Pregunta', value_name='Media')
+    largo = largo.dropna(subset=['Media'])
+
+    if largo.empty:
+        return None
+
+    fig = px.bar(
+        largo, x='Pregunta', y='Media', color='Grupo',
+        barmode='group', text='Media',
+        color_discrete_sequence=COLORES_MIXTOS,
     )
-    
-    ax.set_xlabel('Pregunta', fontweight='bold')
-    ax.set_ylabel('Media', fontweight='bold')
-    ax.set_title(f"Comparación de medias por grupo\nBasado en: {pregunta_grupo[:70]}", pad=15, fontsize=12)
-    ax.legend(title='Grupo', bbox_to_anchor=(1.02, 1), loc='upper left', fontsize=9)
-    ax.grid(True, axis='y', alpha=0.3)
-    
-    plt.xticks(rotation=15, ha='right', fontsize=9)
-    plt.tight_layout()
-    
+    fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+
+    fig.update_layout(
+        title=dict(text=f'Comparación por grupo<br>{_wrap_texto(pregunta_grupo, 70)}',
+                   x=0.5, xanchor='center', font=dict(size=14)),
+        font=dict(family="DejaVu Sans, Arial, sans-serif", size=11),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        height=580,
+        margin=dict(l=70, r=160, t=140, b=120),
+        legend=dict(orientation='v', x=1.02, y=1, xanchor='left'),
+        xaxis_tickangle=-20,
+    )
+
     ruta = os.path.join(directorio, nombre_archivo)
-    plt.savefig(ruta, dpi=130, bbox_inches='tight', facecolor='white')
-    plt.close()
-    
-    logger.info(f"  📊 Comparación grupos: {nombre_archivo}")
-    return ruta
+    logger.info(f"  📊 Grupos: {nombre_archivo}")
+    return _fig_a_resultado(fig, ruta)
 
 
 # ============================================
-# 8. GRÁFICO DE ÍNDICE DE SATISFACCIÓN
+# 7. ÍNDICE SATISFACCIÓN
 # ============================================
-
-def grafico_indice_satisfaccion(indice_satisfaccion, directorio, nombre_archivo='indice_satisfaccion.png'):
-    """
-    Gráfico de barras con el índice de satisfacción por pregunta.
-    """
-    df = indice_satisfaccion.get('por_pregunta')
-    
+def grafico_indice_satisfaccion(indice, directorio,
+                                 nombre_archivo='indice_satisfaccion.png'):
+    df = indice.get('por_pregunta')
     if df is None or df.empty:
         return None
-    
-    n_preguntas = len(df)
-    altura = max(5, min(12, n_preguntas * 0.7 + 3))
-    
-    fig, ax = plt.subplots(figsize=(11, altura))
-    
-    etiquetas = [t[:45] + '...' if len(t) > 45 else t for t in df['Pregunta'].tolist()]
-    valores = df['Indice_Promedio'].tolist()
-    
-    colores = []
-    for v in valores:
-        if v >= 70:
-            colores.append('#2ecc71')
-        elif v >= 50:
-            colores.append('#f1c40f')
-        else:
-            colores.append('#e74c3c')
-    
-    barras = ax.barh(range(len(etiquetas)), valores, color=colores, edgecolor='white', linewidth=2)
-    
-    for barra, valor in zip(barras, valores):
-        ax.text(valor + 1, barra.get_y() + barra.get_height() / 2,
-                f'{valor:.1f}', va='center', fontsize=10, fontweight='bold')
-    
-    ax.set_yticks(range(len(etiquetas)))
-    ax.set_yticklabels(etiquetas, fontsize=9)
-    ax.set_xlabel('Índice de satisfacción (0-100)', fontweight='bold')
-    ax.set_title('Índice de satisfacción por pregunta', pad=15, fontsize=12)
-    ax.set_xlim(0, 105)
-    ax.axvline(50, color='gray', linestyle='--', alpha=0.5, label='Neutral')
-    ax.axvline(70, color='green', linestyle='--', alpha=0.5, label='Satisfactorio')
-    ax.legend(loc='lower right')
-    ax.grid(True, axis='x', alpha=0.3)
-    
-    plt.tight_layout()
-    
+
+    df = df.copy()
+    df['Pregunta_corta'] = df['Pregunta'].apply(
+        lambda t: t[:55] + ('...' if len(t) > 55 else '')
+    )
+    df['color'] = df['Indice_Promedio'].apply(
+        lambda v: '#2ecc71' if v >= 70 else ('#f1c40f' if v >= 50 else '#e74c3c')
+    )
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=df['Indice_Promedio'].tolist(),
+        y=df['Pregunta_corta'].tolist(),
+        orientation='h',
+        marker=dict(color=df['color'].tolist()),
+        text=df['Indice_Promedio'].apply(lambda v: f'{v:.1f}').tolist(),
+        textposition='outside',
+    ))
+    fig.add_vline(
+        x=50, line_dash="dash", line_color="gray",
+        annotation_text="Neutral", annotation_position="top",
+    )
+    fig.add_vline(
+        x=70, line_dash="dash", line_color="green",
+        annotation_text="Satisfactorio", annotation_position="top",
+    )
+
+    fig.update_layout(
+        title=dict(text='Índice de satisfacción por pregunta',
+                   x=0.5, xanchor='center', font=dict(size=14)),
+        font=dict(family="DejaVu Sans, Arial, sans-serif", size=11),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        height=max(500, len(df) * 80),
+        margin=dict(l=340, r=60, t=120, b=60),
+        xaxis=dict(range=[0, 110], title='Índice (0-100)'),
+        yaxis=dict(autorange='reversed'),
+        showlegend=False,
+    )
+
     ruta = os.path.join(directorio, nombre_archivo)
-    plt.savefig(ruta, dpi=130, bbox_inches='tight', facecolor='white')
-    plt.close()
-    
-    logger.info(f"  📈 Índice satisfacción: {nombre_archivo}")
-    return ruta
+    logger.info(f"  📈 Índice: {nombre_archivo}")
+    return _fig_a_resultado(fig, ruta)
 
 
 # ============================================
-# 9. HEATMAP DE TABLA DE CONTINGENCIA
+# 8. HEATMAP CONTINGENCIA
 # ============================================
-
-def grafico_heatmap_contingencia(tabla_contingencia, pregunta1, pregunta2, directorio, nombre_archivo='heatmap_contingencia.png'):
-    """
-    Heatmap de una tabla de contingencia.
-    """
-    if tabla_contingencia is None or tabla_contingencia.empty:
+def grafico_heatmap_contingencia(tabla, p1, p2, directorio,
+                                  nombre_archivo='heatmap_contingencia.png'):
+    if tabla is None or tabla.empty:
         return None
-    
-    n_filas = len(tabla_contingencia)
-    n_cols = len(tabla_contingencia.columns)
-    tamaño = max(8, min(16, max(n_filas, n_cols) * 0.8 + 4))
-    
-    fig, ax = plt.subplots(figsize=(tamaño, tamaño * 0.85))
-    
-    sns.heatmap(
-        tabla_contingencia,
-        annot=True,
-        fmt='d',
-        cmap='Blues',
-        linewidths=1,
-        cbar_kws={'label': 'Frecuencia'},
-        ax=ax,
-        annot_kws={'fontsize': 10, 'fontweight': 'bold'}
+
+    fig = px.imshow(
+        tabla,
+        color_continuous_scale='Blues',
+        text_auto=True,
+        aspect='auto',
     )
-    
-    ax.set_title(
-        f"Tabla de contingencia\n{pregunta1[:45]}  vs  {pregunta2[:45]}",
-        pad=15,
-        fontsize=11
+    fig.update_traces(textfont=dict(size=10))
+
+    fig.update_layout(
+        title=dict(
+            text=f'Contingencia<br>{_wrap_texto(p1, 40)} vs {_wrap_texto(p2, 40)}',
+            x=0.5, xanchor='center', font=dict(size=13),
+        ),
+        font=dict(family="DejaVu Sans, Arial, sans-serif", size=11),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        height=560,
+        margin=dict(l=70, r=40, t=140, b=140),
+        xaxis=dict(tickangle=-30, tickfont=dict(size=9), title=p2[:60]),
+        yaxis=dict(tickfont=dict(size=9), title=p1[:60]),
     )
-    ax.set_xlabel(pregunta2[:60], fontweight='bold')
-    ax.set_ylabel(pregunta1[:60], fontweight='bold')
-    
-    plt.xticks(rotation=30, ha='right', fontsize=9)
-    plt.yticks(rotation=0, fontsize=9)
-    
-    plt.tight_layout()
-    
+
     ruta = os.path.join(directorio, nombre_archivo)
-    plt.savefig(ruta, dpi=130, bbox_inches='tight', facecolor='white')
-    plt.close()
-    
     logger.info(f"  🔥 Contingencia: {nombre_archivo}")
-    return ruta
+    return _fig_a_resultado(fig, ruta)
 
 
 # ============================================
 # GENERADOR MASIVO
 # ============================================
-
 def generar_todos_los_graficos(
     metadata,
     df_numerico,
@@ -744,76 +606,78 @@ def generar_todos_los_graficos(
     correlaciones_result,
     grupos_result,
     indice_result,
-    directorio
+    directorio,
+    incluir_html=True,   # ← se ignora (compat con llamadas viejas)
 ):
     """
-    Genera todos los gráficos posibles y devuelve un dict con las rutas.
+    Genera los gráficos.
+    ✅ SOLO PASTEL por pregunta (barras deshabilitadas).
     """
     _preparar_directorio(directorio)
     graficos = {}
-    
-    logger.info("🎨 Generando gráficos...")
-    
-    # 1. Barras y pastel por pregunta
+    omitidos = []
+
+    logger.info("🎨 Generando gráficos (Plotly + kaleido) — solo pastel...")
+
     for pregunta in metadata['preguntas']:
-        df_preg = frecuencias_df[frecuencias_df['Pregunta_ID'] == pregunta['id']]
-        if df_preg.empty:
+        pid = pregunta['id']
+        df_preg = frecuencias_df[frecuencias_df['Pregunta_ID'] == pid]
+
+        if not _tiene_datos(df_preg):
+            logger.info(f"  ⏭️  P{pid} sin datos → se omite")
+            omitidos.append(pid)
             continue
-        
-        nombre_base = f"P{pregunta['id']}_{_limpiar_nombre(pregunta['texto'])}"
-        
-        # Barras
-        ruta_barras = grafico_barras_pregunta(pregunta, df_preg, directorio, nombre_base)
-        if ruta_barras:
-            graficos[f'P{pregunta["id"]}_barras'] = ruta_barras
-        
-        # Pastel (solo si no son muchas opciones, o agrupado)
-        if len(df_preg) <= 15 or len(df_preg[df_preg['Frecuencia'] > 0]) <= 15:
-            ruta_pastel = grafico_pastel_pregunta(pregunta, df_preg, directorio, nombre_base)
-            if ruta_pastel:
-                graficos[f'P{pregunta["id"]}_pastel'] = ruta_pastel
-        
-        # Histograma para Likert
-        if pregunta['tipo'] == 'escala_likert':
-            col = f"P{pregunta['id']}"
-            if col in df_numerico.columns:
-                valores = pd.to_numeric(df_numerico[col], errors='coerce')
-                ruta_hist = grafico_histograma_likert(pregunta, valores, directorio, nombre_base)
-                if ruta_hist:
-                    graficos[f'P{pregunta["id"]}_histograma'] = ruta_hist
-    
-    # 2. Boxplot Likert
-    ruta_boxplot = grafico_boxplot_likert(df_numerico, metadata, directorio)
-    if ruta_boxplot:
-        graficos['boxplot_likert'] = ruta_boxplot
-    
-    # 3. Barras apiladas
-    ruta_apiladas = grafico_barras_apiladas_comparativa(frecuencias_df, metadata, directorio)
-    if ruta_apiladas:
-        graficos['barras_apiladas'] = ruta_apiladas
-    
-    # 4. Heatmap correlaciones
-    if correlaciones_result and not correlaciones_result.get('matriz', pd.DataFrame()).empty:
-        ruta_heat = grafico_heatmap_correlaciones(correlaciones_result['matriz'], directorio)
-        if ruta_heat:
-            graficos['heatmap_correlaciones'] = ruta_heat
-    
-    # 5. Comparación de grupos
-    if grupos_result and not grupos_result.get('df_comparacion', pd.DataFrame()).empty:
-        ruta_grupos = grafico_comparacion_grupos(
-            grupos_result['df_comparacion'],
-            grupos_result.get('grupo_pregunta', ''),
-            directorio
+
+        nombre_base = f"P{pid}_{_limpiar_nombre(pregunta['texto'])}"
+
+        res_pastel = grafico_pastel_pregunta(
+            pregunta, df_preg, directorio, nombre_base
         )
-        if ruta_grupos:
-            graficos['comparacion_grupos'] = ruta_grupos
-    
-    # 6. Índice de satisfacción
+        if res_pastel:
+            graficos[f'P{pid}_pastel'] = res_pastel
+
+        if pregunta['tipo'] == 'escala_likert':
+            col = f"P{pid}"
+            if col in df_numerico.columns:
+                v = pd.to_numeric(df_numerico[col], errors='coerce')
+                if v.notna().sum() > 0:
+                    res_hist = grafico_histograma_likert(
+                        pregunta, v, directorio, nombre_base
+                    )
+                    if res_hist:
+                        graficos[f'P{pid}_histograma'] = res_hist
+
+    res = grafico_boxplot_likert(df_numerico, metadata, directorio)
+    if res:
+        graficos['boxplot_likert'] = res
+
+    res = grafico_barras_apiladas_comparativa(frecuencias_df, metadata, directorio)
+    if res:
+        graficos['barras_apiladas'] = res
+
+    matriz = correlaciones_result.get('matriz') if correlaciones_result else None
+    if matriz is not None and not matriz.empty and len(matriz) >= 2:
+        res = grafico_heatmap_correlaciones(matriz, directorio)
+        if res:
+            graficos['heatmap_correlaciones'] = res
+
+    df_comp = grupos_result.get('df_comparacion') if grupos_result else None
+    if df_comp is not None and not df_comp.empty:
+        res = grafico_comparacion_grupos(
+            df_comp,
+            grupos_result.get('grupo_pregunta', ''),
+            directorio,
+        )
+        if res:
+            graficos['comparacion_grupos'] = res
+
     if indice_result and indice_result.get('indice_global') is not None:
-        ruta_indice = grafico_indice_satisfaccion(indice_result, directorio)
-        if ruta_indice:
-            graficos['indice_satisfaccion'] = ruta_indice
-    
-    logger.info(f"✅ {len(graficos)} gráficos generados")
-    
-    return graficos
+        res = grafico_indice_satisfaccion(indice_result, directorio)
+        if res:
+            graficos['indice_satisfaccion'] = res
+
+    logger.info(f"✅ {len(graficos)} gráficos generados, {len(omitidos)} omitidos")
+    return {
+        'graficos': graficos,
+        'omitidos': omitidos,
+    }
