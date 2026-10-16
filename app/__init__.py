@@ -32,6 +32,10 @@ def create_app():
         from app.models import User
         return User.query.get(int(user_id))
 
+    # ============================================
+    # REGISTRAR BLUEPRINTS
+    # ============================================
+
     from app.routes.auth import auth_bp
     app.register_blueprint(auth_bp)
 
@@ -44,8 +48,18 @@ def create_app():
     from app.routes.analisis import analisis_bp
     app.register_blueprint(analisis_bp)
 
+    # ✅ NUEVO: Motor cuantitativo
+    from app.routes.cuantitativo import cuantitativo_bp
+    app.register_blueprint(cuantitativo_bp)
+
     with app.app_context():
         db.create_all()
         print("Base de datos conectada correctamente")
+        print("Blueprints registrados:")
+        print("   - auth")
+        print("   - encuestas")
+        print("   - respuestas")
+        print("   - analisis (cualitativo)")
+        print("   - cuantitativo")
 
     return app

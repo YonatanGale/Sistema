@@ -74,9 +74,27 @@
                     <div class="display-1 text-info mb-4">
                         <i class="bi bi-cpu"></i>
                     </div>
-                    <h5 class="card-title fw-bold">Motor de Análisis</h5>
-                    <p class="card-text text-muted small">Análisis cualitativo con IA</p>
+                    <h5 class="card-title fw-bold">Motor Cualitativo</h5>
+                    <p class="card-text text-muted small">Análisis de sentimiento con IA</p>
                     <a href="{{ url_for('analisis.motor_analisis') }}" class="btn btn-custom btn-info mt-3">
+                        <i class="bi bi-play-circle"></i> Analizar
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Motor de Análisis Cuantitativo -->
+        <div class="col-md-6 col-lg-3">
+            <div class="card card-custom text-center h-100 shadow-hover border-primary">
+                <div class="card-body py-5">
+                    <div class="display-1 mb-4" style="color: #9b59b6;">
+                        <i class="bi bi-graph-up-arrow"></i>
+                    </div>
+                    <h5 class="card-title fw-bold">Motor Cuantitativo</h5>
+                    <p class="card-text text-muted small">Estadísticas y correlaciones</p>
+                    <a href="{{ url_for('cuantitativo.motor_cuantitativo') }}" 
+                       class="btn btn-custom mt-3"
+                       style="background: linear-gradient(135deg, #9b59b6, #8e44ad); color: white; border: none;">
                         <i class="bi bi-play-circle"></i> Analizar
                     </a>
                 </div>

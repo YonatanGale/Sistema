@@ -216,3 +216,18 @@ temp_export_*
 motor_cualitativo/data/resultados/*.xlsx
 motor_cualitativo/data/resultados/*.csv
 !motor_cualitativo/data/resultados/.gitkeep
+
+
+# ============================================
+# MOTOR CUANTITATIVO - DATOS GENERADOS
+# ============================================
+# Resultados de análisis (Excel, JSON, PNGs)
+motor_cuantitativo/data/resultados/motor_*
+motor_cuantitativo/data/resultados/encuesta_*
+
+# Archivos temporales de análisis
+motor_cuantitativo/data/temp/*
+!motor_cuantitativo/data/temp/.gitkeep
+
+# CSV de prueba
+motor_cuantitativo/data/pruebas/*.csv
