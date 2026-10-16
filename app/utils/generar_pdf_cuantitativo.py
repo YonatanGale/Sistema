@@ -2,6 +2,7 @@
 """
 Generador de PDF para el análisis cuantitativo.
 Incluye: KPIs, estadísticas, gráficos, correlaciones, grupos e índice de satisfacción.
+Muestra avisos cuando no hay datos para un análisis específico.
 """
 
 import os
@@ -84,6 +85,37 @@ def _get_estilos():
         textColor=colors.HexColor('#666666')
     ))
     
+    # ✅ NUEVO: Estilo para avisos de datos no disponibles
+    estilos.add(ParagraphStyle(
+        name='AvisoNoDisponible',
+        parent=estilos['Normal'],
+        fontSize=11,
+        leading=16,
+        textColor=colors.HexColor('#d35400'),
+        alignment=TA_CENTER,
+        spaceBefore=15,
+        spaceAfter=15,
+        backColor=colors.HexColor('#fff9e6'),
+        borderColor=colors.HexColor('#f39c12'),
+        borderWidth=2,
+        borderPadding=15
+    ))
+    
+    estilos.add(ParagraphStyle(
+        name='AvisoSugerencia',
+        parent=estilos['Normal'],
+        fontSize=9,
+        leading=13,
+        textColor=colors.HexColor('#7f8c8d'),
+        alignment=TA_LEFT,
+        spaceBefore=10,
+        spaceAfter=15,
+        backColor=colors.HexColor('#f8f9fa'),
+        borderColor=colors.HexColor('#e9ecef'),
+        borderWidth=1,
+        borderPadding=10
+    ))
+    
     return estilos
 
 
@@ -101,18 +133,51 @@ def _fmt(valor, decimales=2):
         return str(valor)
 
 
-def _imagen_a_flowable(ruta_png, ancho_max=17*cm):
-    """Convierte un PNG en un flowable de reportlab ajustado al ancho."""
+def _imagen_a_flowable(ruta_png, ancho_max=16*cm, alto_max=20*cm):
+    """
+    Convierte un PNG en un flowable de reportlab ajustado al ancho Y alto.
+    """
     if not os.path.exists(ruta_png):
         return None
     
     try:
-        img = RLImage(ruta_png)
-        # Escalar proporcionalmente para no superar el ancho máximo
-        ratio = img.imageHeight / img.imageWidth
-        img.drawWidth = ancho_max
-        img.drawHeight = ancho_max * ratio
+        from PIL import Image as PILImage
+        
+        with PILImage.open(ruta_png) as img_pil:
+            ancho_original, alto_original = img_pil.size
+        
+        if ancho_original == 0 or alto_original == 0:
+            return None
+        
+        ratio = alto_original / ancho_original
+        
+        ancho_dibujo = ancho_max
+        alto_dibujo = ancho_dibujo * ratio
+        
+        if alto_dibujo > alto_max:
+            alto_dibujo = alto_max
+            ancho_dibujo = alto_dibujo / ratio
+        
+        img = RLImage(ruta_png, width=ancho_dibujo, height=alto_dibujo)
+        
         return img
+        
+    except ImportError:
+        logger.warning("PIL no disponible, usando solo restricción de ancho")
+        try:
+            img = RLImage(ruta_png)
+            ratio = img.imageHeight / img.imageWidth
+            img.drawWidth = ancho_max
+            img.drawHeight = ancho_max * ratio
+            
+            if img.drawHeight > alto_max:
+                img.drawHeight = alto_max
+                img.drawWidth = alto_max / ratio
+            
+            return img
+        except Exception as e:
+            logger.warning(f"Error con fallback: {e}")
+            return None
     except Exception as e:
         logger.warning(f"Error cargando imagen {ruta_png}: {e}")
         return None
@@ -125,7 +190,6 @@ def _tabla_con_estilo(data, col_widths=None):
     
     tabla = Table(data, colWidths=col_widths, repeatRows=1)
     tabla.setStyle(TableStyle([
-        # Header
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#8e44ad')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
@@ -134,7 +198,6 @@ def _tabla_con_estilo(data, col_widths=None):
         ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
         ('TOPPADDING', (0, 0), (-1, 0), 8),
         
-        # Body
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 1), (-1, -1), 8),
         ('ALIGN', (0, 1), (-1, -1), 'LEFT'),
@@ -174,7 +237,6 @@ def _portada(estilos, metadata):
         ))
     elementos.append(Spacer(1, 3*cm))
     
-    # Info de pie
     info_data = [
         ['Fecha de análisis:', datetime.now().strftime('%d/%m/%Y %H:%M')],
         ['Total encuestados:', str(metadata.get('total_encuestados', 0))],
@@ -199,7 +261,6 @@ def _seccion_resumen(estilos, metadata, resultados):
     elementos.append(Paragraph("1. Resumen General", estilos['Seccion']))
     elementos.append(Spacer(1, 0.3*cm))
     
-    # Tabla de KPIs
     correlaciones_num = len(resultados.get('correlaciones', {}).get('pares_significativos', []))
     indice = resultados.get('indice_satisfaccion', {}).get('indice_global')
     
@@ -215,8 +276,6 @@ def _seccion_resumen(estilos, metadata, resultados):
         elementos.append(tabla)
     
     elementos.append(Spacer(1, 0.5*cm))
-    
-    # Lista de preguntas analizadas
     elementos.append(Paragraph("Preguntas analizadas", estilos['Subseccion']))
     
     preguntas_data = [['ID', 'Pregunta', 'Tipo', 'Opciones']]
@@ -247,24 +306,17 @@ def _seccion_resumen(estilos, metadata, resultados):
 
 
 def _seccion_graficos(estilos, graficos, directorio_graficos):
-    """
-    Todos los gráficos, dos por página.
-    
-    ✅ CORREGIDO: Ahora lista los PNGs directamente del directorio
-    (no depende del dict 'graficos' que puede venir vacío del JSON).
-    """
+    """Todos los gráficos, dos por página."""
     elementos = []
     elementos.append(Paragraph("2. Gráficos del Análisis", estilos['Seccion']))
     elementos.append(Spacer(1, 0.3*cm))
     
-    # ✅ Solo verificar el directorio, no el dict
     if not os.path.exists(directorio_graficos):
         logger.warning(f"Directorio de gráficos no existe: {directorio_graficos}")
         elementos.append(Paragraph("No se generaron gráficos.", estilos['TextoNormal']))
         elementos.append(PageBreak())
         return elementos
     
-    # Listar todos los PNGs del directorio
     archivos_png = sorted([f for f in os.listdir(directorio_graficos) if f.endswith('.png')])
     
     logger.info(f"📊 Gráficos encontrados: {len(archivos_png)} en {directorio_graficos}")
@@ -276,11 +328,9 @@ def _seccion_graficos(estilos, graficos, directorio_graficos):
     
     for i, archivo in enumerate(archivos_png):
         ruta = os.path.join(directorio_graficos, archivo)
-        
-        # Nombre amigable
         nombre_amigable = archivo.replace('.png', '').replace('_', ' ').title()
         
-        img = _imagen_a_flowable(ruta, ancho_max=16*cm)
+        img = _imagen_a_flowable(ruta, ancho_max=16*cm, alto_max=20*cm)
         if img:
             bloque = [
                 Paragraph(f"Gráfico {i+1}: {nombre_amigable}", estilos['Subseccion']),
@@ -290,7 +340,6 @@ def _seccion_graficos(estilos, graficos, directorio_graficos):
             ]
             elementos.append(KeepTogether(bloque))
             
-            # Salto de página cada 2 gráficos
             if (i + 1) % 2 == 0 and (i + 1) < len(archivos_png):
                 elementos.append(PageBreak())
         else:
@@ -336,23 +385,41 @@ def _seccion_estadisticas(estilos, resultados):
     return elementos
 
 
+# ============================================
+# ✅ SECCIÓN: CORRELACIONES (con aviso)
+# ============================================
 def _seccion_correlaciones(estilos, resultados):
-    """Tabla de correlaciones significativas."""
+    """Tabla de correlaciones significativas con aviso si no hay datos."""
     elementos = []
     elementos.append(Paragraph("4. Correlaciones Significativas", estilos['Seccion']))
     elementos.append(Spacer(1, 0.3*cm))
     
     pares = resultados.get('correlaciones', {}).get('pares_significativos', [])
+    
+    # ✅ AVISO CUANDO NO HAY DATOS
     if not pares:
         elementos.append(Paragraph(
-            "No se encontraron correlaciones significativas (|r| ≥ 0.3).",
+            "⚠️ No se encontraron correlaciones significativas",
+            estilos['AvisoNoDisponible']
+        ))
+        elementos.append(Paragraph(
+            "Se necesitan <b>al menos 2 preguntas numéricas</b> "
+            "(Escala Likert, Sí/No o escalas ordenadas) para poder "
+            "calcular correlaciones entre ellas.",
             estilos['TextoNormal']
+        ))
+        elementos.append(Spacer(1, 0.3*cm))
+        elementos.append(Paragraph(
+            "💡 <b>Sugerencia:</b> Incluye al menos 2 preguntas con escala "
+            "de valoración (por ejemplo: 'Muy malo / Malo / Regular / Bueno / "
+            "Muy bueno') para poder analizar las relaciones entre ellas.",
+            estilos['AvisoSugerencia']
         ))
         elementos.append(PageBreak())
         return elementos
     
     data = [['Pregunta 1', 'Pregunta 2', 'r', 'Interpretación']]
-    for par in pares[:30]:  # Limitar a 30
+    for par in pares[:30]:
         data.append([
             str(par.get('Pregunta_1', ''))[:35],
             str(par.get('Pregunta_2', ''))[:35],
@@ -371,8 +438,11 @@ def _seccion_correlaciones(estilos, resultados):
     return elementos
 
 
+# ============================================
+# ✅ SECCIÓN: GRUPOS (con aviso)
+# ============================================
 def _seccion_grupos(estilos, resultados):
-    """Análisis por grupos."""
+    """Análisis por grupos con aviso si no hay datos."""
     elementos = []
     elementos.append(Paragraph("5. Análisis por Grupos", estilos['Seccion']))
     elementos.append(Spacer(1, 0.3*cm))
@@ -381,10 +451,25 @@ def _seccion_grupos(estilos, resultados):
     grupo_pregunta = grupos.get('grupo_pregunta')
     resumen = grupos.get('resumen', [])
     
+    # ✅ AVISO CUANDO NO HAY DATOS
     if not resumen:
         elementos.append(Paragraph(
-            "No hay datos de grupos disponibles.",
+            "⚠️ No se puede mostrar el análisis por grupos",
+            estilos['AvisoNoDisponible']
+        ))
+        elementos.append(Paragraph(
+            "Esta encuesta <b>no contiene preguntas de tipo Sí/No</b> ni "
+            "<b>preguntas con pocas opciones</b> (máximo 6) que puedan "
+            "usarse como criterio de agrupación.",
             estilos['TextoNormal']
+        ))
+        elementos.append(Spacer(1, 0.3*cm))
+        elementos.append(Paragraph(
+            "💡 <b>Sugerencia:</b> Incluye al menos una pregunta como "
+            "'Sexo', 'Rango de edad' o cualquier pregunta con opciones "
+            "mutuamente excluyentes para poder comparar los resultados "
+            "entre grupos.",
+            estilos['AvisoSugerencia']
         ))
         elementos.append(PageBreak())
         return elementos
@@ -397,7 +482,7 @@ def _seccion_grupos(estilos, resultados):
         elementos.append(Spacer(1, 0.3*cm))
     
     data = [['Pregunta', 'Grupo', 'N', 'Media', 'Mediana', 'Desv. Est.']]
-    for row in resumen[:40]:  # Limitar
+    for row in resumen[:40]:
         data.append([
             str(row.get('Pregunta', ''))[:40],
             str(row.get('Grupo', ''))[:20],
@@ -418,8 +503,11 @@ def _seccion_grupos(estilos, resultados):
     return elementos
 
 
+# ============================================
+# ✅ SECCIÓN: SATISFACCIÓN (con aviso)
+# ============================================
 def _seccion_satisfaccion(estilos, resultados):
-    """Índice de satisfacción."""
+    """Índice de satisfacción con aviso si no hay datos."""
     elementos = []
     elementos.append(Paragraph("6. Índice de Satisfacción", estilos['Seccion']))
     elementos.append(Spacer(1, 0.3*cm))
@@ -428,15 +516,29 @@ def _seccion_satisfaccion(estilos, resultados):
     indice_global = indice.get('indice_global')
     por_pregunta = indice.get('por_pregunta', [])
     
+    # ✅ AVISO CUANDO NO HAY DATOS
     if indice_global is None:
         elementos.append(Paragraph(
-            "No hay índice de satisfacción disponible.",
+            "⚠️ No se puede calcular el índice de satisfacción",
+            estilos['AvisoNoDisponible']
+        ))
+        elementos.append(Paragraph(
+            "Esta encuesta <b>no contiene preguntas de tipo Escala Likert</b> "
+            "ni <b>escalas ordenadas</b> (como 'Muy bajo, Bajo, Medio, Alto, "
+            "Muy Alto').",
             estilos['TextoNormal']
+        ))
+        elementos.append(Spacer(1, 0.3*cm))
+        elementos.append(Paragraph(
+            "💡 <b>Sugerencia:</b> Incluye al menos una pregunta con escala "
+            "de valoración (por ejemplo: '¿Cómo calificas el servicio?' con "
+            "opciones 'Muy malo / Malo / Regular / Bueno / Muy bueno') para "
+            "poder calcular el índice de satisfacción.",
+            estilos['AvisoSugerencia']
         ))
         elementos.append(PageBreak())
         return elementos
     
-    # Índice global grande
     color = '#2ecc71' if indice_global >= 70 else ('#f39c12' if indice_global >= 50 else '#e74c3c')
     etiqueta = 'Satisfactorio' if indice_global >= 70 else ('Neutral' if indice_global >= 50 else 'Necesita Mejora')
     
@@ -451,7 +553,6 @@ def _seccion_satisfaccion(estilos, resultados):
     ))
     elementos.append(Spacer(1, 0.5*cm))
     
-    # Tabla por pregunta
     if por_pregunta:
         elementos.append(Paragraph("Índice por pregunta", estilos['Subseccion']))
         data = [['Pregunta', 'Índice', 'Min', 'Max']]
@@ -475,15 +576,7 @@ def _seccion_satisfaccion(estilos, resultados):
 # ============================================
 
 def generar_pdf_analisis_cuantitativo(directorio_resultados):
-    """
-    Genera un PDF completo con todos los resultados del análisis.
-    
-    Args:
-        directorio_resultados: ruta al directorio con los resultados
-    
-    Returns:
-        BytesIO con el PDF generado
-    """
+    """Genera un PDF completo con todos los resultados del análisis."""
     # ============================================
     # 1. CARGAR DATOS
     # ============================================
@@ -544,11 +637,10 @@ def generar_pdf_analisis_cuantitativo(directorio_resultados):
         canvas.saveState()
         canvas.setFont('Helvetica', 8)
         canvas.setFillColor(colors.HexColor('#888888'))
-        texto = f"Página {doc.page}"
         canvas.drawRightString(
             A4[0] - 2*cm,
             1*cm,
-            texto
+            f"Página {doc.page}"
         )
         canvas.drawString(
             2*cm,

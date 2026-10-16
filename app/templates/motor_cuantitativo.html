@@ -134,6 +134,24 @@
         padding: 10px;
     }
     .modal-imagen .modal-body img { max-width: 100%; max-height: 85vh; }
+    
+    .aviso-vacio {
+        background: #fff9e6;
+        border: 2px dashed #f39c12;
+        border-radius: 12px;
+        padding: 3rem 2rem;
+        text-align: center;
+    }
+    .aviso-vacio i { font-size: 4rem; color: #f39c12; }
+    .aviso-vacio h4 { color: #d35400; margin-top: 1rem; }
+    .aviso-vacio .sugerencia {
+        background: white;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-top: 1rem;
+        text-align: left;
+        font-size: 0.9rem;
+    }
 </style>
 {% endblock %}
 
@@ -371,7 +389,7 @@
                     </div>
                 </div>
 
-                <!-- ✅ BOTONES DE ACCIÓN (PDF + EXCEL + REINICIAR) -->
+                <!-- Botones de acción -->
                 <div class="text-center mt-4 mb-5">
                     <a href="{{ url_for('cuantitativo.descargar_pdf') }}" 
                        class="btn btn-custom btn-danger btn-lg me-2" 
@@ -524,7 +542,6 @@ document.addEventListener('DOMContentLoaded', function() {
 // MOSTRAR RESULTADOS
 // ============================================
 function mostrarResultadosCuanti(data) {
-    // KPIs
     document.getElementById('kpiEncuestados').textContent = data.metadata.total_encuestados;
     document.getElementById('kpiPreguntas').textContent = data.metadata.total_preguntas;
     document.getElementById('kpiIndice').textContent = 
@@ -533,22 +550,11 @@ function mostrarResultadosCuanti(data) {
     document.getElementById('kpiCorrelaciones').textContent = 
         data.correlaciones.pares_significativos.length;
     
-    // Gráficos
     mostrarGraficos(data.graficos);
-    
-    // Estadísticas
     mostrarEstadisticas(data.estadisticas_descriptivas);
-    
-    // Frecuencias
     mostrarFrecuencias(data.frecuencias);
-    
-    // Correlaciones
     mostrarCorrelaciones(data.correlaciones);
-    
-    // Grupos
     mostrarGrupos(data.grupos);
-    
-    // Satisfacción
     mostrarSatisfaccion(data.indice_satisfaccion);
 }
 
@@ -560,7 +566,12 @@ function mostrarGraficos(graficos) {
     document.getElementById('badgeGraficos').textContent = keys.length;
     
     if (keys.length === 0) {
-        container.innerHTML = '<div class="col-12 text-center text-muted py-4">No se generaron gráficos</div>';
+        container.innerHTML = `
+            <div class="col-12 text-center text-muted py-4">
+                <i class="bi bi-bar-chart" style="font-size: 4rem; color: #ccc;"></i>
+                <h4 class="mt-3">No se generaron gráficos</h4>
+            </div>
+        `;
         return;
     }
     
@@ -586,6 +597,11 @@ function mostrarEstadisticas(estadisticas) {
     const tbody = document.getElementById('tbodyEstadisticas');
     tbody.innerHTML = '';
     
+    if (!estadisticas || estadisticas.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">No hay datos estadísticos disponibles</td></tr>';
+        return;
+    }
+    
     estadisticas.forEach(row => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -608,6 +624,11 @@ function mostrarFrecuencias(frecuencias) {
     const tbody = document.getElementById('tbodyFrecuencias');
     tbody.innerHTML = '';
     
+    if (!frecuencias || frecuencias.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">No hay frecuencias disponibles</td></tr>';
+        return;
+    }
+    
     frecuencias.forEach(row => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -627,15 +648,27 @@ function mostrarFrecuencias(frecuencias) {
     });
 }
 
+// ============================================
+// CORRELACIONES (con aviso cuando no hay datos)
+// ============================================
 function mostrarCorrelaciones(corr) {
     const container = document.getElementById('contenedorCorrelaciones');
     
     if (!corr.pares_significativos || corr.pares_significativos.length === 0) {
         container.innerHTML = `
-            <div class="text-center py-5">
-                <i class="bi bi-link-45deg" style="font-size: 4rem; color: #ccc;"></i>
-                <h4 class="mt-3 text-muted">No hay correlaciones significativas</h4>
-                <p class="text-muted">Se necesitan al menos 2 preguntas numéricas.</p>
+            <div class="aviso-vacio">
+                <i class="bi bi-link-45deg"></i>
+                <h4>No se encontraron correlaciones significativas</h4>
+                <p class="text-muted mb-0">
+                    Se necesitan <strong>al menos 2 preguntas numéricas</strong> 
+                    (Escala Likert, Sí/No o escalas ordenadas) para poder calcular correlaciones.
+                </p>
+                <div class="sugerencia">
+                    <strong>💡 Sugerencia:</strong>
+                    Incluye al menos 2 preguntas con escala de valoración 
+                    (por ejemplo: "Muy malo / Malo / Regular / Bueno / Muy bueno") 
+                    para poder analizar las relaciones entre ellas.
+                </div>
             </div>
         `;
         return;
@@ -665,15 +698,28 @@ function mostrarCorrelaciones(corr) {
     container.innerHTML = html;
 }
 
+// ============================================
+// GRUPOS (con aviso cuando no hay datos)
+// ============================================
 function mostrarGrupos(grupos) {
     const container = document.getElementById('contenedorGrupos');
     
     if (!grupos.resumen || grupos.resumen.length === 0) {
         container.innerHTML = `
-            <div class="text-center py-5">
-                <i class="bi bi-people" style="font-size: 4rem; color: #ccc;"></i>
-                <h4 class="mt-3 text-muted">No hay análisis por grupos</h4>
-                <p class="text-muted">Se necesita al menos una pregunta de opción única o Sí/No.</p>
+            <div class="aviso-vacio">
+                <i class="bi bi-people"></i>
+                <h4>No se puede mostrar el análisis por grupos</h4>
+                <p class="text-muted mb-0">
+                    Esta encuesta <strong>no contiene preguntas de tipo Sí/No</strong> 
+                    ni <strong>preguntas con pocas opciones</strong> (máximo 6) que 
+                    puedan usarse como criterio de agrupación.
+                </p>
+                <div class="sugerencia">
+                    <strong>💡 Sugerencia:</strong>
+                    Incluye al menos una pregunta como "Sexo", "Rango de edad" 
+                    o cualquier pregunta con opciones mutuamente excluyentes 
+                    para poder comparar los resultados entre grupos.
+                </div>
             </div>
         `;
         return;
@@ -682,7 +728,8 @@ function mostrarGrupos(grupos) {
     let html = `
         <div class="alert alert-info">
             <i class="bi bi-info-circle"></i>
-            <strong>Grupo:</strong> ${grupos.grupo_pregunta}
+            <strong>Grupo de comparación:</strong>
+            ${grupos.grupo_pregunta}
         </div>
         <div class="card card-custom"><div class="card-body">
         <div class="table-responsive">
@@ -717,15 +764,29 @@ function mostrarGrupos(grupos) {
     container.innerHTML = html;
 }
 
+// ============================================
+// SATISFACCIÓN (con aviso cuando no hay datos)
+// ============================================
 function mostrarSatisfaccion(indice) {
     const container = document.getElementById('contenedorSatisfaccion');
     
     if (!indice.indice_global) {
         container.innerHTML = `
-            <div class="text-center py-5">
-                <i class="bi bi-star" style="font-size: 4rem; color: #ccc;"></i>
-                <h4 class="mt-3 text-muted">No hay índice de satisfacción</h4>
-                <p class="text-muted">Se necesitan preguntas de escala Likert.</p>
+            <div class="aviso-vacio">
+                <i class="bi bi-star"></i>
+                <h4>No se puede calcular el índice de satisfacción</h4>
+                <p class="text-muted mb-0">
+                    Esta encuesta <strong>no contiene preguntas de tipo Escala Likert</strong> 
+                    ni <strong>escalas ordenadas</strong> 
+                    (como "Muy bajo, Bajo, Medio, Alto, Muy Alto").
+                </p>
+                <div class="sugerencia">
+                    <strong>💡 Sugerencia:</strong>
+                    Incluye al menos una pregunta con escala de valoración 
+                    (por ejemplo: "¿Cómo calificas el servicio?" con opciones 
+                    "Muy malo / Malo / Regular / Bueno / Muy bueno") 
+                    para poder calcular el índice de satisfacción.
+                </div>
             </div>
         `;
         return;

@@ -12,17 +12,91 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================
+# DETECCIÓN DE ESCALAS ORDENADAS
+# ============================================
+
+# Patrones comunes de escalas ordenadas en español
+PATRONES_ESCALAS_ORDENADAS = [
+    # Escala Likert clásica
+    ['muy malo', 'malo', 'regular', 'bueno', 'muy bueno'],
+    ['muy mal', 'mal', 'regular', 'bien', 'muy bien'],
+    ['pésimo', 'malo', 'regular', 'bueno', 'excelente'],
+    # Escala de frecuencia
+    ['nunca', 'rara vez', 'a veces', 'frecuentemente', 'siempre'],
+    ['nunca', 'casi nunca', 'a veces', 'casi siempre', 'siempre'],
+    # Escala de satisfacción
+    ['muy insatisfecho', 'insatisfecho', 'neutral', 'satisfecho', 'muy satisfecho'],
+    ['muy insatisfecho', 'insatisfecho', 'ni satisfecho ni insatisfecho', 'satisfecho', 'muy satisfecho'],
+    # Escala de nivel
+    ['muy bajo', 'bajo', 'medio', 'alto', 'muy alto'],
+    ['muy bajo', 'bajo', 'regular', 'alto', 'muy alto'],
+    ['ninguno', 'poco', 'moderado', 'bastante', 'mucho'],
+    # Escala de acuerdo
+    ['totalmente en desacuerdo', 'en desacuerdo', 'neutral', 'de acuerdo', 'totalmente de acuerdo'],
+    ['muy en desacuerdo', 'en desacuerdo', 'ni de acuerdo ni en desacuerdo', 'de acuerdo', 'muy de acuerdo'],
+    # Escala de importancia
+    ['nada importante', 'poco importante', 'neutral', 'importante', 'muy importante'],
+]
+
+
+def _normalizar_texto_opcion(texto):
+    """Normaliza un texto para comparar (sin tildes, minúsculas)."""
+    import unicodedata
+    if not texto:
+        return ""
+    texto = str(texto).strip().lower()
+    texto = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('ASCII')
+    return texto
+
+
+def es_escala_ordenada(pregunta):
+    """
+    Detecta si una pregunta de opción única representa una escala ordenada.
+    
+    Args:
+        pregunta: dict con 'tipo', 'opciones'
+    
+    Returns:
+        bool: True si parece ser una escala ordenada
+    """
+    if pregunta['tipo'] == 'escala_likert':
+        return True
+    
+    if pregunta['tipo'] != 'opcion_unica':
+        return False
+    
+    opciones = pregunta.get('opciones', [])
+    
+    if len(opciones) < 3 or len(opciones) > 7:
+        return False
+    
+    # Normalizar opciones
+    opciones_norm = [_normalizar_texto_opcion(o) for o in opciones]
+    
+    # Comparar con patrones conocidos
+    for patron in PATRONES_ESCALAS_ORDENADAS:
+        if len(patron) != len(opciones_norm):
+            continue
+        
+        # Verificar coincidencia (>=80% de las opciones coinciden)
+        coincidencias = sum(
+            1 for i, op in enumerate(opciones_norm)
+            if i < len(patron) and op == patron[i]
+        )
+        
+        if coincidencias >= len(patron) * 0.8:
+            return True
+    
+    return False
+
+
+# ============================================
 # ESTADÍSTICAS DESCRIPTIVAS
 # ============================================
 
 def calcular_estadisticas_descriptivas(df_numerico, metadata):
     """
     Calcula estadísticas descriptivas para cada pregunta.
-    
-    Returns:
-        pd.DataFrame con columnas:
-        - Pregunta_ID, Tipo, Total_Respuestas, Media, Mediana, Moda,
-          Desv_Est, Min, Max, Q1, Q3, Rango_Intercuartil
     """
     resultados = []
     
@@ -33,7 +107,6 @@ def calcular_estadisticas_descriptivas(df_numerico, metadata):
         if col not in df_numerico.columns:
             continue
         
-        # Obtener valores numéricos no nulos
         valores = pd.to_numeric(df_numerico[col], errors='coerce').dropna()
         
         fila = {
@@ -43,7 +116,13 @@ def calcular_estadisticas_descriptivas(df_numerico, metadata):
             'Total_Respuestas': len(valores)
         }
         
-        if len(valores) > 0 and tipo in ['escala_likert', 'seleccion_si_no', 'opcion_unica']:
+        # ✅ AMPLIAR: Incluir opcion_unica si parece escala ordenada
+        es_calculable = (
+            tipo in ['escala_likert', 'seleccion_si_no'] or
+            es_escala_ordenada(pregunta)
+        )
+        
+        if len(valores) > 0 and es_calculable:
             fila['Media'] = round(valores.mean(), 3)
             fila['Mediana'] = round(valores.median(), 3)
             try:
@@ -68,10 +147,7 @@ def calcular_estadisticas_descriptivas(df_numerico, metadata):
 def calcular_frecuencias(df_categorico, metadata):
     """
     Calcula la frecuencia y porcentaje de cada opción por pregunta.
-    
-    Returns:
-        pd.DataFrame con columnas:
-        - Pregunta_ID, Pregunta, Opcion, Frecuencia, Porcentaje
+    ✅ CORREGIDO: Convierte valores a string para evitar problemas con int/str.
     """
     resultados = []
     
@@ -82,16 +158,23 @@ def calcular_frecuencias(df_categorico, metadata):
         if col not in df_categorico.columns:
             continue
         
+        # ✅ CONVERTIR COLUMNA A STRING (evita problemas con 2007 vs "2007")
+        columna_str = df_categorico[col].apply(
+            lambda x: str(x).strip() if pd.notna(x) else None
+        )
+        
         if tipo == 'opcion_multiple':
-            # Contar apariciones individuales de cada opción
             conteo = {op: 0 for op in pregunta['opciones']}
-            for valor in df_categorico[col].dropna():
+            for valor in columna_str.dropna():
                 if not valor:
                     continue
                 opciones_marcadas = [o.strip() for o in str(valor).split(';') if o.strip()]
                 for op in opciones_marcadas:
-                    if op in conteo:
-                        conteo[op] += 1
+                    # ✅ Buscar coincidencia exacta o normalizada
+                    for opcion_real in conteo.keys():
+                        if op == opcion_real or _normalizar_texto_opcion(op) == _normalizar_texto_opcion(opcion_real):
+                            conteo[opcion_real] += 1
+                            break
             
             total = sum(conteo.values())
             
@@ -105,12 +188,22 @@ def calcular_frecuencias(df_categorico, metadata):
                     'Porcentaje': round((freq / total * 100), 2) if total > 0 else 0
                 })
         else:
-            # Opción única / Likert / Sí-No
-            conteo = df_categorico[col].value_counts(dropna=True).to_dict()
+            # ✅ Opción única / Likert / Sí-No
+            conteo = columna_str.value_counts(dropna=True).to_dict()
             total = sum(conteo.values())
             
             for opcion in pregunta['opciones']:
-                freq = conteo.get(opcion, 0)
+                opcion_str = str(opcion).strip()
+                freq = conteo.get(opcion_str, 0)
+                
+                # ✅ Fallback: buscar con normalización si no encontró
+                if freq == 0:
+                    opcion_norm = _normalizar_texto_opcion(opcion_str)
+                    for key, val in conteo.items():
+                        if _normalizar_texto_opcion(key) == opcion_norm:
+                            freq = val
+                            break
+                
                 resultados.append({
                     'Pregunta_ID': pregunta['id'],
                     'Pregunta': pregunta['texto'],
@@ -128,20 +221,7 @@ def calcular_frecuencias(df_categorico, metadata):
 # ============================================
 
 def calcular_correlaciones(df_numerico, metadata, metodo='spearman'):
-    """
-    Calcula la matriz de correlaciones entre preguntas numéricas.
-    
-    Args:
-        df_numerico: DataFrame con valores numéricos
-        metadata: dict con info de las preguntas
-        metodo: 'spearman' o 'pearson'
-    
-    Returns:
-        dict con:
-        - 'matriz': DataFrame con la matriz de correlación
-        - 'pares_significativos': DataFrame con pares de correlación alta
-    """
-    # Filtrar solo columnas que sean numéricas y de tipo Likert/opción única
+    """Calcula la matriz de correlaciones entre preguntas numéricas."""
     columnas_numericas = []
     nombres_columnas = {}
     
@@ -150,7 +230,13 @@ def calcular_correlaciones(df_numerico, metadata, metodo='spearman'):
         if col not in df_numerico.columns:
             continue
         
-        if pregunta['tipo'] in ['escala_likert', 'seleccion_si_no', 'opcion_unica']:
+        # ✅ AMPLIAR: incluir opcion_unica con escala ordenada
+        tipo_ok = (
+            pregunta['tipo'] in ['escala_likert', 'seleccion_si_no'] or
+            es_escala_ordenada(pregunta)
+        )
+        
+        if tipo_ok:
             valores = pd.to_numeric(df_numerico[col], errors='coerce')
             if valores.notna().sum() >= 3:
                 columnas_numericas.append(col)
@@ -163,37 +249,36 @@ def calcular_correlaciones(df_numerico, metadata, metodo='spearman'):
             'pares_significativos': pd.DataFrame()
         }
     
-    # Calcular matriz de correlación
     df_corr = df_numerico[columnas_numericas].apply(pd.to_numeric, errors='coerce')
     matriz = df_corr.corr(method=metodo)
     
-    # Renombrar para mostrar textos
     matriz.columns = [nombres_columnas[c] for c in matriz.columns]
     matriz.index = [nombres_columnas[c] for c in matriz.index]
     
-    # Extraer pares con correlación significativa (|r| >= 0.3)
     pares = []
     for i, col1 in enumerate(columnas_numericas):
         for col2 in columnas_numericas[i+1:]:
-            r = df_corr[col1].corr(df_corr[col2], method=metodo)
-            if pd.notna(r) and abs(r) >= 0.3:
-                # Calcular p-value con Spearman
-                try:
-                    valores_comunes = df_corr[[col1, col2]].dropna()
-                    if len(valores_comunes) >= 3:
-                        _, p_value = stats.spearmanr(valores_comunes[col1], valores_comunes[col2])
-                    else:
+            try:
+                r = df_corr[col1].corr(df_corr[col2], method=metodo)
+                if pd.notna(r) and abs(r) >= 0.3:
+                    try:
+                        valores_comunes = df_corr[[col1, col2]].dropna()
+                        if len(valores_comunes) >= 3:
+                            _, p_value = stats.spearmanr(valores_comunes[col1], valores_comunes[col2])
+                        else:
+                            p_value = None
+                    except Exception:
                         p_value = None
-                except Exception:
-                    p_value = None
-                
-                pares.append({
-                    'Pregunta_1': nombres_columnas[col1],
-                    'Pregunta_2': nombres_columnas[col2],
-                    'Correlacion': round(r, 3),
-                    'P_Value': round(p_value, 4) if p_value is not None else None,
-                    'Interpretacion': interpretar_correlacion(r)
-                })
+                    
+                    pares.append({
+                        'Pregunta_1': nombres_columnas[col1],
+                        'Pregunta_2': nombres_columnas[col2],
+                        'Correlacion': round(r, 3),
+                        'P_Value': round(p_value, 4) if p_value is not None else None,
+                        'Interpretacion': interpretar_correlacion(r)
+                    })
+            except Exception as e:
+                logger.warning(f"Error correlación {col1} vs {col2}: {e}")
     
     df_pares = pd.DataFrame(pares)
     if not df_pares.empty:
@@ -230,26 +315,12 @@ def interpretar_correlacion(r):
 def analizar_grupos(df_numerico, df_categorico, metadata, pregunta_grupo_id=None):
     """
     Compara los resultados entre grupos definidos por una pregunta categórica.
-    
-    Si no se especifica pregunta_grupo_id, usa la primera pregunta de opción única
-    o Sí/No disponible.
-    
-    Args:
-        df_numerico: DataFrame con valores numéricos
-        df_categorico: DataFrame con valores categóricos
-        metadata: metadata de la encuesta
-        pregunta_grupo_id: ID de la pregunta que define los grupos
-    
-    Returns:
-        dict con:
-        - 'grupo_pregunta': texto de la pregunta usada
-        - 'resumen': DataFrame con estadísticas por grupo
-        - 'df_comparacion': DataFrame con los datos usados
+    ✅ CORREGIDO: Ahora incluye opcion_unica como posible grupo.
     """
-    # Encontrar pregunta de agrupación
+    # Encontrar pregunta de agrupación: la primera con pocas opciones
     if pregunta_grupo_id is None:
         for p in metadata['preguntas']:
-            if p['tipo'] in ['opcion_unica', 'seleccion_si_no'] and len(p['opciones']) <= 5:
+            if p['tipo'] in ['opcion_unica', 'seleccion_si_no'] and 2 <= len(p['opciones']) <= 6:
                 pregunta_grupo_id = p['id']
                 break
     
@@ -270,14 +341,22 @@ def analizar_grupos(df_numerico, df_categorico, metadata, pregunta_grupo_id=None
     
     col_grupo = f"P{pregunta_grupo_id}"
     
-    # Preguntas numéricas a comparar (excluyendo la de grupo)
-    preguntas_comparar = [
-        p for p in metadata['preguntas']
-        if p['tipo'] in ['escala_likert', 'seleccion_si_no']
-        and p['id'] != pregunta_grupo_id
-    ]
+    # ✅ CORREGIDO: Ampliar tipos de pregunta a comparar
+    preguntas_comparar = []
+    for p in metadata['preguntas']:
+        if p['id'] == pregunta_grupo_id:
+            continue
+        
+        tipo_ok = (
+            p['tipo'] in ['escala_likert', 'seleccion_si_no'] or
+            es_escala_ordenada(p)
+        )
+        
+        if tipo_ok:
+            preguntas_comparar.append(p)
     
     if not preguntas_comparar:
+        logger.warning("No hay preguntas comparables para análisis de grupos")
         return {
             'grupo_pregunta': pregunta_grupo['texto'],
             'resumen': pd.DataFrame(),
@@ -286,7 +365,9 @@ def analizar_grupos(df_numerico, df_categorico, metadata, pregunta_grupo_id=None
     
     # Combinar datos
     df_comb = df_categorico[['Identificador', col_grupo]].copy()
-    df_comb['Grupo'] = df_comb[col_grupo].fillna('Sin respuesta')
+    df_comb['Grupo'] = df_comb[col_grupo].apply(
+        lambda x: str(x).strip() if pd.notna(x) and str(x).strip() else 'Sin respuesta'
+    )
     
     for p in preguntas_comparar:
         col = f"P{p['id']}"
@@ -327,25 +408,18 @@ def analizar_grupos(df_numerico, df_categorico, metadata, pregunta_grupo_id=None
 
 def calcular_indice_satisfaccion(df_numerico, metadata):
     """
-    Calcula un índice de satisfacción global basado en preguntas Likert.
-    
-    El índice se normaliza a escala 0-100, donde:
-    - 0 = Muy insatisfecho
-    - 100 = Muy satisfecho
-    
-    Returns:
-        dict con:
-        - 'indice_global': float (0-100)
-        - 'por_encuestado': DataFrame con índice por encuestado
-        - 'por_pregunta': DataFrame con índice por pregunta
+    Calcula un índice de satisfacción global basado en preguntas Likert
+    y también en opcion_unica con escala ordenada.
+    ✅ CORREGIDO: Detección automática de escalas ordenadas.
     """
-    # Obtener preguntas Likert
-    preguntas_likert = [
-        p for p in metadata['preguntas']
-        if p['tipo'] == 'escala_likert'
-    ]
+    # ✅ Buscar preguntas con escala ordenada (Likert + opcion_unica detectada)
+    preguntas_escala = []
+    for p in metadata['preguntas']:
+        if p['tipo'] == 'escala_likert' or es_escala_ordenada(p):
+            preguntas_escala.append(p)
     
-    if not preguntas_likert:
+    if not preguntas_escala:
+        logger.warning("No hay preguntas con escala ordenada para índice de satisfacción")
         return {
             'indice_global': None,
             'por_encuestado': pd.DataFrame(),
@@ -353,25 +427,24 @@ def calcular_indice_satisfaccion(df_numerico, metadata):
         }
     
     # Construir DataFrame con solo estas preguntas
-    df_likert = df_numerico[['Identificador']].copy()
+    df_escala = df_numerico[['Identificador']].copy()
     rangos = {}
     
-    for p in preguntas_likert:
+    for p in preguntas_escala:
         col = f"P{p['id']}"
         if col not in df_numerico.columns:
             continue
         
         valores = pd.to_numeric(df_numerico[col], errors='coerce')
-        df_likert[col] = valores
+        df_escala[col] = valores
         
-        # Calcular rango (min y max) para normalizar
         min_val = valores.min()
         max_val = valores.max()
         rangos[col] = {'min': min_val, 'max': max_val}
     
-    columnas_likert = [c for c in df_likert.columns if c != 'Identificador']
+    columnas_escala = [c for c in df_escala.columns if c != 'Identificador']
     
-    if not columnas_likert:
+    if not columnas_escala:
         return {
             'indice_global': None,
             'por_encuestado': pd.DataFrame(),
@@ -379,25 +452,25 @@ def calcular_indice_satisfaccion(df_numerico, metadata):
         }
     
     # Normalizar cada pregunta a 0-100
-    df_normalizado = df_likert[['Identificador']].copy()
-    for col in columnas_likert:
+    df_normalizado = df_escala[['Identificador']].copy()
+    for col in columnas_escala:
         min_val = rangos[col]['min']
         max_val = rangos[col]['max']
         if max_val > min_val:
-            df_normalizado[col] = (df_likert[col] - min_val) / (max_val - min_val) * 100
+            df_normalizado[col] = (df_escala[col] - min_val) / (max_val - min_val) * 100
         else:
-            df_normalizado[col] = 50  # Valor neutral si no hay variación
+            df_normalizado[col] = 50
     
-    # Índice por encuestado: promedio de sus respuestas normalizadas
-    df_normalizado['Indice'] = df_normalizado[columnas_likert].mean(axis=1)
+    # Índice por encuestado
+    df_normalizado['Indice'] = df_normalizado[columnas_escala].mean(axis=1)
     
     # Índice global
     indice_global = df_normalizado['Indice'].mean()
     
     # Índice por pregunta
     por_pregunta = []
-    for col in columnas_likert:
-        pregunta = next((p for p in preguntas_likert if f"P{p['id']}" == col), None)
+    for col in columnas_escala:
+        pregunta = next((p for p in preguntas_escala if f"P{p['id']}" == col), None)
         if pregunta:
             por_pregunta.append({
                 'Pregunta': pregunta['texto'],
@@ -418,16 +491,7 @@ def calcular_indice_satisfaccion(df_numerico, metadata):
 # ============================================
 
 def calcular_tabla_contingencia(df_categorico, metadata, pregunta1_id, pregunta2_id):
-    """
-    Calcula la tabla de contingencia entre dos preguntas categóricas.
-    
-    Returns:
-        dict con:
-        - 'tabla': tabla cruzada
-        - 'chi2': valor de Chi-cuadrado
-        - 'p_value': p-value
-        - 'significativo': bool
-    """
+    """Calcula la tabla de contingencia entre dos preguntas categóricas."""
     col1 = f"P{pregunta1_id}"
     col2 = f"P{pregunta2_id}"
     
@@ -439,10 +503,8 @@ def calcular_tabla_contingencia(df_categorico, metadata, pregunta1_id, pregunta2
             'significativo': False
         }
     
-    # Crear tabla cruzada
     tabla = pd.crosstab(df_categorico[col1], df_categorico[col2])
     
-    # Prueba Chi-cuadrado
     try:
         chi2, p_value, dof, expected = stats.chi2_contingency(tabla)
         significativo = p_value < 0.05
