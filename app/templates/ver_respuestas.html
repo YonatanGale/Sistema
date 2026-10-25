@@ -53,8 +53,25 @@
                             <small class="text-muted d-block">Para análisis estadístico</small>
                         </a>
                     </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <!-- ✅ NUEVO: Exportar completo (integrado) -->
+                        <a class="dropdown-item fw-bold"
+                           href="{{ url_for('motor_integrado.exportar_completo', encuesta_id=encuesta.id) }}"
+                           style="color: #16a085;">
+                            <i class="bi bi-file-earmark-zip"></i> Exportar completo (integrado)
+                            <small class="text-muted d-block">Cuantitativo + cualitativo en un solo CSV</small>
+                        </a>
+                    </li>
                 </ul>
             </div>
+
+            <!-- ✅ NUEVO: Botón directo al Motor Integrado -->
+            <a href="{{ url_for('motor_integrado.motor_integrado') }}"
+               class="btn btn-custom"
+               style="background: linear-gradient(135deg, #16a085, #138d75); color: white; border: none;">
+                <i class="bi bi-cpu"></i> Motor Integrado
+            </a>
 
             <button class="btn btn-custom btn-custom-danger" 
                     onclick="eliminarTodasRespuestas({{ encuesta.id }})">
