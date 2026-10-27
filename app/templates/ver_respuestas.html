@@ -21,28 +21,11 @@
                     <i class="bi bi-download"></i> Exportar
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end">
-                    <li>
-                        <a class="dropdown-item" href="{{ url_for('respuestas.exportar_respuestas', encuesta_id=encuesta.id) }}">
-                            <i class="bi bi-file-earmark-excel"></i> Todas las respuestas
-                        </a>
-                    </li>
-                    <li>
-                        <a class="dropdown-item" href="{{ url_for('respuestas.exportar_cuantitativos', encuesta_id=encuesta.id) }}">
-                            <i class="bi bi-bar-chart"></i> Datos cuantitativos
-                            <small class="text-muted d-block">Preguntas cerradas + estadísticas</small>
-                        </a>
-                    </li>
-                    <li>
-                        <a class="dropdown-item" href="{{ url_for('respuestas.exportar_cualitativos', encuesta_id=encuesta.id) }}">
-                            <i class="bi bi-chat-text"></i> Datos cualitativos (Excel)
-                            <small class="text-muted d-block">Preguntas abiertas + respuestas "Otro"</small>
-                        </a>
-                    </li>
                     <li><hr class="dropdown-divider"></li>
                     <li>
                         <a class="dropdown-item text-primary fw-bold" 
                            href="{{ url_for('respuestas.exportar_cualitativo_csv', encuesta_id=encuesta.id) }}">
-                            <i class="bi bi-filetype-csv"></i> Exportar CSV para Motor IA
+                            <i class="bi bi-filetype-csv"></i> Exportar CSV para Motor cuantitativo
                             <small class="text-muted d-block">Formato para análisis cualitativo</small>
                         </a>
                     </li>
