@@ -23,34 +23,15 @@ def allowed_file(filename):
 # ============================================
 
 def limpiar_nombre_archivo(texto, max_length=30):
-    """
-    Limpia un texto para usarlo como nombre de archivo.
-    Elimina tildes, caracteres especiales y espacios.
-    
-    Ejemplo:
-        "Evaluación de Satisfacción General 2026"
-        → "Evaluacion_de_Satisfaccion_Genera"
-    """
     if not texto:
         return "sin_titulo"
-    
-    # Normalizar y eliminar tildes/ñ
     texto = unicodedata.normalize('NFKD', str(texto))
     texto = texto.encode('ASCII', 'ignore').decode('ASCII')
-    
-    # Reemplazar caracteres no permitidos por guión bajo
     texto = re.sub(r'[^a-zA-Z0-9_-]', '_', texto)
-    
-    # Eliminar guiones bajos múltiples
     texto = re.sub(r'_+', '_', texto)
-    
-    # Quitar guiones al inicio y final
     texto = texto.strip('_')
-    
-    # Limitar longitud
     if len(texto) > max_length:
         texto = texto[:max_length].rstrip('_')
-    
     return texto if texto else "sin_titulo"
 
 
@@ -59,10 +40,6 @@ def limpiar_nombre_archivo(texto, max_length=30):
 # ============================================
 
 def normalizar_texto(texto):
-    """
-    Elimina tildes y convierte a minúsculas para comparación
-    Útil para: "Sí" → "si", "Muy Bueno" → "muy bueno"
-    """
     if not texto:
         return ""
     texto = str(texto).strip().lower()
@@ -75,24 +52,13 @@ def normalizar_texto(texto):
 # ============================================
 
 def mapear_valor_opcion(valor, opciones):
-    """
-    Mapea un valor a una opción existente.
-    - Números: 1, 2, 3, 4, 5 → opción en esa posición
-    - 0 → "No" (para preguntas Sí/No)
-    - 1 → "Sí" (para preguntas Sí/No)
-    - Letras: A, B, C, D, E → opción en esa posición
-    - Texto exacto (con o sin tildes)
-    - true/false → Sí/No
-    """
     if not opciones:
         return None
     
     valor_str = str(valor).strip()
     valor_normalizado = normalizar_texto(valor_str)
     
-    # ============================================
     # 0. MAPEO ESPECIAL PARA SÍ/NO (0 → No, 1 → Sí)
-    # ============================================
     if len(opciones) == 2:
         opciones_texto = [normalizar_texto(o.texto) for o in opciones]
         if 'si' in opciones_texto and 'no' in opciones_texto:
@@ -113,29 +79,165 @@ def mapear_valor_opcion(valor, opciones):
                     if normalizar_texto(opcion.texto) == 'no':
                         return opcion
     
-    # 1. Coincidencia exacta (case insensitive)
+    # 1. Coincidencia exacta
     for opcion in opciones:
         if opcion.texto.strip().lower() == valor_str.lower():
             return opcion
     
-    # 2. Coincidencia normalizada (sin tildes)
+    # 2. Coincidencia normalizada
     for opcion in opciones:
         if normalizar_texto(opcion.texto) == valor_normalizado:
             return opcion
     
-    # 3. Mapeo: A → 1ª opción, B → 2ª opción, etc.
+    # 3. Mapeo: A → 1ª opción, B → 2ª opción
     if len(valor_str) == 1 and valor_str.isalpha():
         letra_index = ord(valor_str.upper()) - ord('A')
         if 0 <= letra_index < len(opciones):
             return opciones[letra_index]
     
-    # 4. Mapeo: 1 → 1ª opción, 2 → 2ª opción, etc.
+    # 4. Mapeo: 1 → 1ª opción, 2 → 2ª opción
     if valor_str.isdigit():
         numero = int(valor_str)
         if 1 <= numero <= len(opciones):
             return opciones[numero - 1]
     
     return None
+
+
+# ============================================
+# LÓGICA DE EXTRACCIÓN DE "OTRO" (MEJORADA)
+# ============================================
+
+def extraer_textos_otro(campo_libre):
+    """
+    Extrae los textos del formato [OTRO P1] texto [OTRO P6] otro texto.
+    Es robusto contra saltos de línea y comillas.
+    """
+    if not campo_libre or pd.isna(campo_libre):
+        return {}
+    
+    texto = str(campo_libre)
+    resultado = {}
+    
+    # ✅ REGEX MEJORADO: Busca [OTRO P5], [OTRO P4b-1], etc.
+    # Captura el texto incluyendo saltos de línea hasta el próximo [OTRO...]
+    patron = r'\[OTRO\s+P([\w\-]+)\](.*?)(?=\[OTRO\s+P|$)'
+    
+    matches = re.finditer(patron, texto, re.DOTALL | re.IGNORECASE)
+    
+    for match in matches:
+        p_id = match.group(1).strip() # Ej: '5' o '4b-1'
+        # Limpiamos saltos de línea, comillas y espacios
+        respuesta = match.group(2).replace('\n', ' ').replace('\r', ' ').strip()
+        respuesta = respuesta.strip('"').strip("'").strip('.')
+        
+        if respuesta:
+            resultado[p_id] = respuesta
+            
+    return resultado
+
+
+def extraer_num_pregunta(columna_nombre):
+    """
+    Extrae el número de pregunta del nombre de la columna.
+    Ej: 'p6_familia' -> 6, 'p4b_area' -> 4, 'p1_anio' -> 1
+    """
+    match = re.match(r'p([\w\-]+)', str(columna_nombre))
+    if match:
+        return match.group(1)
+    return None
+
+
+# ============================================
+# LÓGICA COMPARTIDA DE CARGA
+# ============================================
+def _procesar_archivo_carga(df, mapeo, encuesta_id):
+    """
+    Procesa el DataFrame y guarda las respuestas en la BD.
+    Retorna (total_guardadas, errores, advertencias).
+    """
+    total_guardadas = 0
+    errores = []
+    advertencias = []
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+
+    # Limpieza de nombres de columnas (quitamos espacios invisibles)
+    df.columns = [str(c).strip() for c in df.columns]
+    mapeo_limpio = {str(k).strip(): v for k, v in mapeo.items()}
+
+    for idx, row in df.iterrows():
+        identificador = f"R{idx+1:04d}_{timestamp}"
+        tiene_respuesta = False
+        
+        # 1. Extraer textos globales de "campo_libre"
+        textos_campo_libre = extraer_textos_otro(row.get('campo_libre', ''))
+        
+        for columna, pregunta_id in mapeo_limpio.items():
+            pregunta = Pregunta.query.get(pregunta_id)
+            if not pregunta:
+                continue
+            
+            valor = row[columna]
+            if valor is None or pd.isna(valor) or str(valor).strip() == '':
+                continue
+            
+            valor_str = str(valor).strip()
+            tiene_respuesta = True
+            
+            if pregunta.tipo == 'texto_libre':
+                # Si mapearon una columna directamente a texto libre
+                texto_limpio = valor_str
+                # Limpiar prefijos técnicos como "[COMENTARIO P3]"
+                texto_limpio = re.sub(r'\[COMENTARIO P[\w\-]+\]', '', texto_limpio).strip()
+                
+                # Ignorar textos genéricos
+                if texto_limpio and "sin especificar" not in texto_limpio.lower():
+                    nueva_respuesta = Respuesta(
+                        encuesta_id=encuesta_id,
+                        pregunta_id=pregunta.id,
+                        texto_libre=texto_limpio,
+                        identificador_respuesta=identificador
+                    )
+                    db.session.add(nueva_respuesta)
+                    total_guardadas += 1
+            else:
+                opciones = Opcion.query.filter_by(pregunta_id=pregunta.id).all()
+                opcion = mapear_valor_opcion(valor_str, opciones)
+                
+                if opcion:
+                    nueva_respuesta = Respuesta(
+                        encuesta_id=encuesta_id,
+                        pregunta_id=pregunta.id,
+                        opcion_id=opcion.id,
+                        identificador_respuesta=identificador
+                    )
+                    
+                    # ✅ ASIGNACIÓN DEL TEXTO A "OTRO"
+                    if opcion.es_otro():
+                        numero_pregunta = extraer_num_pregunta(columna)
+                        
+                        # Buscar en el diccionario que extrajimos de campo_libre
+                        texto_real = None
+                        if numero_pregunta and str(numero_pregunta) in textos_campo_libre:
+                            texto_real = textos_campo_libre[str(numero_pregunta)]
+                            
+                        # Si lo encontramos, lo guardamos en la BD
+                        if texto_real:
+                            nueva_respuesta.texto_libre = texto_real
+                        else:
+                            # Si no hay texto, lo dejamos vacío para no ensuciar el análisis
+                            nueva_respuesta.texto_libre = ""
+                    
+                    db.session.add(nueva_respuesta)
+                    total_guardadas += 1
+                else:
+                    opciones_texto = [o.texto for o in opciones]
+                    errores.append(f"Fila {idx+1}: No se encontró la opción '{valor_str}'. Opciones: {opciones_texto}")
+        
+        if not tiene_respuesta:
+            advertencias.append(f"Fila {idx+1}: No se encontraron respuestas válidas")
+
+    return total_guardadas, errores, advertencias
 
 
 # ============================================
@@ -199,55 +301,7 @@ def cargar_respuestas(encuesta_id):
                 flash('Debes mapear al menos una columna a una pregunta', 'danger')
                 return redirect(request.url)
             
-            total_guardadas = 0
-            errores = []
-            advertencias = []
-            
-            for idx, row in df.iterrows():
-                identificador = f"R{idx+1:04d}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                tiene_respuesta = False
-                
-                for columna, pregunta_id in mapeo.items():
-                    pregunta = Pregunta.query.get(pregunta_id)
-                    if not pregunta:
-                        continue
-                    
-                    valor = row[columna]
-                    
-                    if valor is None or pd.isna(valor) or str(valor).strip() == '':
-                        continue
-                    
-                    valor_str = str(valor).strip()
-                    tiene_respuesta = True
-                    
-                    if pregunta.tipo == 'texto_libre':
-                        nueva_respuesta = Respuesta(
-                            encuesta_id=encuesta_id,
-                            pregunta_id=pregunta.id,
-                            texto_libre=valor_str,
-                            identificador_respuesta=identificador
-                        )
-                        db.session.add(nueva_respuesta)
-                        total_guardadas += 1
-                    else:
-                        opciones = Opcion.query.filter_by(pregunta_id=pregunta.id).all()
-                        opcion = mapear_valor_opcion(valor_str, opciones)
-                        
-                        if opcion:
-                            nueva_respuesta = Respuesta(
-                                encuesta_id=encuesta_id,
-                                pregunta_id=pregunta.id,
-                                opcion_id=opcion.id,
-                                identificador_respuesta=identificador
-                            )
-                            db.session.add(nueva_respuesta)
-                            total_guardadas += 1
-                        else:
-                            opciones_texto = [o.texto for o in opciones]
-                            errores.append(f"Fila {idx+1}: No se encontró la opción '{valor_str}'. Opciones disponibles: {opciones_texto}")
-                
-                if not tiene_respuesta:
-                    advertencias.append(f"Fila {idx+1}: No se encontraron respuestas válidas")
+            total_guardadas, errores, advertencias = _procesar_archivo_carga(df, mapeo, encuesta_id)
             
             db.session.commit()
             
@@ -262,6 +316,7 @@ def cargar_respuestas(encuesta_id):
             return redirect(url_for('respuestas.ver_respuestas', encuesta_id=encuesta_id))
             
         except Exception as e:
+            db.session.rollback()
             flash(f'Error al procesar el archivo: {str(e)}', 'danger')
             return redirect(request.url)
     
@@ -309,7 +364,7 @@ def previsualizar_archivo(encuesta_id):
         
         df = df.where(pd.notnull(df), None)
         columnas = list(df.columns)
-        columnas_limpias = [col.strip('"').strip() for col in columnas]
+        columnas_limpias = [str(col).strip('"').strip() for col in columnas]
         
         preguntas = Pregunta.query.filter_by(encuesta_id=encuesta_id).all()
         preguntas_data = [{'id': p.id, 'texto': p.texto, 'tipo': p.tipo} for p in preguntas]
@@ -434,7 +489,6 @@ def exportar_respuestas(encuesta_id):
     
     output.seek(0)
     
-    # ✅ NOMBRE LIMPIO
     titulo_limpio = limpiar_nombre_archivo(encuesta.titulo)
     
     return send_file(
@@ -452,7 +506,6 @@ def exportar_respuestas(encuesta_id):
 @respuestas_bp.route('/respuesta/<int:respuesta_id>/eliminar', methods=['POST'])
 @login_required
 def eliminar_respuesta(respuesta_id):
-    """Elimina una respuesta individual por su ID"""
     try:
         respuesta = Respuesta.query.get_or_404(respuesta_id)
         encuesta = respuesta.encuesta
@@ -475,7 +528,6 @@ def eliminar_respuesta(respuesta_id):
 @respuestas_bp.route('/encuesta/<int:encuesta_id>/respuestas/<string:identificador>/eliminar', methods=['POST'])
 @login_required
 def eliminar_respuestas_por_identificador(encuesta_id, identificador):
-    """Elimina todas las respuestas de un encuestado específico"""
     try:
         encuesta = Encuesta.query.get_or_404(encuesta_id)
         
@@ -563,47 +615,7 @@ def cargar_respuestas_ajax(encuesta_id):
         if not mapeo:
             return jsonify({'success': False, 'message': 'Debes mapear al menos una columna'}), 400
         
-        total_guardadas = 0
-        errores = []
-        
-        for idx, row in df.iterrows():
-            identificador = f"R{idx+1:04d}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-            
-            for columna, pregunta_id in mapeo.items():
-                pregunta = Pregunta.query.get(pregunta_id)
-                if not pregunta:
-                    continue
-                
-                valor = row[columna]
-                if valor is None or pd.isna(valor) or str(valor).strip() == '':
-                    continue
-                
-                valor_str = str(valor).strip()
-                
-                if pregunta.tipo == 'texto_libre':
-                    nueva_respuesta = Respuesta(
-                        encuesta_id=encuesta_id,
-                        pregunta_id=pregunta.id,
-                        texto_libre=valor_str,
-                        identificador_respuesta=identificador
-                    )
-                    db.session.add(nueva_respuesta)
-                    total_guardadas += 1
-                else:
-                    opciones = Opcion.query.filter_by(pregunta_id=pregunta.id).all()
-                    opcion = mapear_valor_opcion(valor_str, opciones)
-                    
-                    if opcion:
-                        nueva_respuesta = Respuesta(
-                            encuesta_id=encuesta_id,
-                            pregunta_id=pregunta.id,
-                            opcion_id=opcion.id,
-                            identificador_respuesta=identificador
-                        )
-                        db.session.add(nueva_respuesta)
-                        total_guardadas += 1
-                    else:
-                        errores.append(f"Fila {idx+1}: No se encontró la opción '{valor_str}'")
+        total_guardadas, errores, advertencias = _procesar_archivo_carga(df, mapeo, encuesta_id)
         
         db.session.commit()
         
@@ -619,6 +631,7 @@ def cargar_respuestas_ajax(encuesta_id):
         })
         
     except Exception as e:
+        db.session.rollback()
         return jsonify({'success': False, 'message': str(e)}), 500
 
 
@@ -629,7 +642,6 @@ def cargar_respuestas_ajax(encuesta_id):
 @respuestas_bp.route('/encuesta/<int:encuesta_id>/exportar/cualitativos')
 @login_required
 def exportar_cualitativos(encuesta_id):
-    """Exporta preguntas cualitativas y sus respuestas"""
     from app.utils.exportar_datos import exportar_datos_cualitativos
     
     encuesta = Encuesta.query.get_or_404(encuesta_id)
@@ -644,7 +656,6 @@ def exportar_cualitativos(encuesta_id):
         flash('⚠️ No hay preguntas cualitativas (texto libre) en esta encuesta', 'warning')
         return redirect(url_for('respuestas.ver_respuestas', encuesta_id=encuesta_id))
     
-    # ✅ NOMBRE LIMPIO
     titulo_limpio = limpiar_nombre_archivo(encuesta.titulo)
     
     return send_file(
@@ -662,7 +673,6 @@ def exportar_cualitativos(encuesta_id):
 @respuestas_bp.route('/encuesta/<int:encuesta_id>/exportar/cuantitativos')
 @login_required
 def exportar_cuantitativos(encuesta_id):
-    """Exporta preguntas cuantitativas con todas las opciones posibles y estadísticas"""
     from app.utils.exportar_datos import exportar_datos_cuantitativos
     
     encuesta = Encuesta.query.get_or_404(encuesta_id)
@@ -677,7 +687,6 @@ def exportar_cuantitativos(encuesta_id):
         flash('⚠️ No hay preguntas cuantitativas (cerradas) en esta encuesta', 'warning')
         return redirect(url_for('respuestas.ver_respuestas', encuesta_id=encuesta_id))
     
-    # ✅ NOMBRE LIMPIO
     titulo_limpio = limpiar_nombre_archivo(encuesta.titulo)
     
     return send_file(
@@ -695,9 +704,6 @@ def exportar_cuantitativos(encuesta_id):
 @respuestas_bp.route('/encuesta/<int:encuesta_id>/exportar/cualitativo-csv')
 @login_required
 def exportar_cualitativo_csv(encuesta_id):
-    """
-    Exporta las respuestas de texto libre a un CSV compatible con el motor cualitativo.
-    """
     from app.utils.exportar_cualitativo_csv import exportar_respuestas_cualitativas
     
     encuesta = Encuesta.query.get_or_404(encuesta_id)
@@ -707,18 +713,15 @@ def exportar_cualitativo_csv(encuesta_id):
         return redirect(url_for('encuestas.mis_encuestas'))
     
     try:
-        # Generar el CSV
         resultado = exportar_respuestas_cualitativas(encuesta_id)
         
         if not resultado or not resultado.get('ruta'):
             flash(f"⚠️ {resultado.get('mensaje', 'No hay datos para exportar')}", 'warning')
             return redirect(url_for('respuestas.ver_respuestas', encuesta_id=encuesta_id))
         
-        # ✅ NOMBRE LIMPIO
         titulo_limpio = limpiar_nombre_archivo(encuesta.titulo)
         nombre_limpio = f"cualitativo_{encuesta_id}_{titulo_limpio}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         
-        # Enviar el archivo al usuario
         return send_file(
             resultado['ruta'],
             mimetype='text/csv; charset=utf-8',
@@ -739,9 +742,6 @@ def exportar_cualitativo_csv(encuesta_id):
 @respuestas_bp.route('/encuesta/<int:encuesta_id>/exportar/cuantitativo-csv')
 @login_required
 def exportar_cuantitativo_csv(encuesta_id):
-    """
-    Exporta las respuestas cuantitativas a un CSV compatible con el motor cuantitativo.
-    """
     from app.utils.exportar_cuantitativo_csv import exportar_respuestas_cuantitativas
     
     encuesta = Encuesta.query.get_or_404(encuesta_id)

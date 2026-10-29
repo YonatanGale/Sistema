@@ -1,19 +1,4 @@
 # app/utils/exportar_encuesta_completa.py
-"""
-Exporta TODAS las respuestas de una encuesta (cuantitativas + cualitativas)
-a un único CSV con metadata que marca el tipo de cada pregunta.
-
-Además, para preguntas con opción "Otro", añade una columna P{id}_otro
-que contiene el texto libre escrito por el encuestado. Esa columna se
-marca como 'texto_libre' en la metadata para que el motor cualitativo
-la analice por separado.
-
-Formato:
-    # METADATA: {...JSON...}
-    Identificador,P5,P6,P10,P10_otro,P30
-    R0001,2007,Femenino,Otro,"Soy estudiante de...",...
-"""
-
 import os
 import re
 import json
@@ -22,7 +7,6 @@ from datetime import datetime
 import pandas as pd
 from app import db
 from app.models import Encuesta, Pregunta, Respuesta, Opcion
-
 
 def limpiar_nombre_archivo(texto, max_length=30):
     if not texto:
@@ -35,30 +19,43 @@ def limpiar_nombre_archivo(texto, max_length=30):
         texto = texto[:max_length].rstrip('_')
     return texto or "sin_titulo"
 
+def extraer_textos_otro(campo_libre):
+    """
+    Extrae los textos del formato [OTRO P1] texto [OTRO P6] otro texto.
+    """
+    if not campo_libre or pd.isna(campo_libre):
+        return {}
+    
+    texto = str(campo_libre)
+    resultado = {}
+    patron = r'\[OTRO P(\d+)\]\s*(.*?)(?=\[OTRO P\d+\]|$)'
+    matches = re.finditer(patron, texto, re.DOTALL | re.IGNORECASE)
+    
+    for match in matches:
+        p_id = match.group(1)
+        respuesta = match.group(2).strip().strip('"').strip("'")
+        if respuesta and respuesta != '.':
+            resultado[p_id] = respuesta
+            
+    return resultado
 
 def _tiene_otro(pregunta):
-    """True si la pregunta tiene una opción que sea 'Otro'."""
     return pregunta.tiene_opcion_otro()
 
-
 def exportar_encuesta_completa(encuesta_id):
-    """Exporta TODAS las preguntas (cuantitativas + cualitativas) en un CSV único."""
     encuesta = Encuesta.query.get(encuesta_id)
-
     if not encuesta:
-        return {'ruta': None, 'nombre_archivo': None,
-                'mensaje': 'Encuesta no encontrada'}
+        return {'ruta': None, 'mensaje': 'Encuesta no encontrada'}
 
     preguntas = Pregunta.query.filter(
         Pregunta.encuesta_id == encuesta_id
     ).order_by(Pregunta.orden).all()
 
     if not preguntas:
-        return {'ruta': None, 'nombre_archivo': None,
-                'mensaje': 'No hay preguntas en esta encuesta'}
+        return {'ruta': None, 'mensaje': 'No hay preguntas en esta encuesta'}
 
     # ============================================
-    # 1. METADATA (con entradas extra para "Otro")
+    # 1. METADATA
     # ============================================
     preguntas_meta = []
     for p in preguntas:
@@ -72,8 +69,6 @@ def exportar_encuesta_completa(encuesta_id):
             'valores': [o.valor if o.valor else None for o in opciones],
         })
 
-        # ✅ Si la pregunta tiene "Otro", añadir una entrada extra
-        #    para el texto libre de esa opción (solo aplica a opción única/múltiple)
         if p.tipo in ('opcion_unica', 'opcion_multiple') and _tiene_otro(p):
             preguntas_meta.append({
                 'id': f"{p.id}_otro",
@@ -98,12 +93,29 @@ def exportar_encuesta_completa(encuesta_id):
     }
 
     # ============================================
-    # 2. CONSTRUIR DATOS (formato ancho)
+    # 2. DATOS (¡AQUÍ ESTÁ EL ARREGLO!)
     # ============================================
     respuestas = Respuesta.query.filter_by(encuesta_id=encuesta_id).all()
-
-    # Cache de opciones para no hacer N queries
     cache_opciones = {o.id: o for o in Opcion.query.all()}
+
+    # Primero, agrupamos todo el texto libre (comentarios y campo_libre) por identificador
+    # para poder buscar patrones [OTRO Px]
+    textos_por_identificador = {}
+    for r in respuestas:
+        ident = r.identificador_respuesta
+        if ident not in textos_por_identificador:
+            textos_por_identificador[ident] = ""
+        
+        if r.texto_libre:
+            # Si es un campo libre con prefijo [OTRO Px], lo acumulamos
+            if "[OTRO P" in str(r.texto_libre).upper() or "[COMENTARIO P" in str(r.texto_libre).upper():
+                textos_por_identificador[ident] += " " + str(r.texto_libre)
+            # Si es la columna campo_libre directa, también
+            elif r.pregunta.texto.lower() == 'campo libre' or r.pregunta.texto.lower() == 'campo_libre':
+                 textos_por_identificador[ident] += " " + str(r.texto_libre)
+
+    # Ahora extraemos los textos de "Otro" de cada identificador
+    otros_extraidos = {ident: extraer_textos_otro(txt) for ident, txt in textos_por_identificador.items()}
 
     datos_por_identificador = {}
     for r in respuestas:
@@ -115,17 +127,18 @@ def exportar_encuesta_completa(encuesta_id):
         col_pid = f"P{pregunta.id}"
         col_otro = f"P{pregunta.id}_otro"
 
-        # ---- Texto libre ----
+        # ---- Texto libre puro ----
         if pregunta.tipo == 'texto_libre':
-            datos_por_identificador[ident][col_pid] = (
-                str(r.texto_libre) if r.texto_libre else ''
-            )
+            texto = str(r.texto_libre).strip() if r.texto_libre else ''
+            # Limpiamos prefijos técnicos para el campo general
+            texto = re.sub(r'\[COMENTARIO P\d+\]', '', texto).strip()
+            if texto and texto != '.':
+                datos_por_identificador[ident][col_pid] = texto
 
         # ---- Opción múltiple ----
         elif pregunta.tipo == 'opcion_multiple':
             textos = []
             tiene_otro_seleccionado = False
-
             if r.opciones_ids:
                 ids = [int(x) for x in r.opciones_ids.split(',') if x.strip()]
                 for id_op in ids:
@@ -137,23 +150,27 @@ def exportar_encuesta_completa(encuesta_id):
 
             datos_por_identificador[ident][col_pid] = ';'.join(textos)
 
-            # Si eligió "Otro" y escribió texto, guardarlo en P{id}_otro
-            if tiene_otro_seleccionado and r.texto_libre:
-                datos_por_identificador[ident][col_otro] = str(r.texto_libre)
+            if tiene_otro_seleccionado:
+                # Buscamos el texto extraído del identificador
+                texto_real = otros_extraidos.get(ident, {}).get(str(pregunta.id), '')
+                if texto_real:
+                    datos_por_identificador[ident][col_otro] = texto_real
 
-        # ---- Opción única / Likert / Sí-No ----
+        # ---- Opción única / Likert ----
         elif r.opcion:
             datos_por_identificador[ident][col_pid] = r.opcion.texto
 
-            # Si la opción elegida es "Otro" y hay texto, guardarlo aparte
-            if r.opcion.es_otro() and r.texto_libre:
-                datos_por_identificador[ident][col_otro] = str(r.texto_libre)
+            if r.opcion.es_otro():
+                # Buscamos el texto extraído del identificador
+                texto_real = otros_extraidos.get(ident, {}).get(str(pregunta.id), '')
+                if texto_real:
+                    datos_por_identificador[ident][col_otro] = texto_real
 
         else:
             datos_por_identificador[ident][col_pid] = ''
 
     # ============================================
-    # 3. CONSTRUIR COLUMNAS DEL DATAFRAME
+    # 3. CONSTRUIR DATAFRAME
     # ============================================
     columnas = ['Identificador']
     for p in preguntas:
@@ -169,40 +186,27 @@ def exportar_encuesta_completa(encuesta_id):
         filas.append(fila)
 
     if not filas:
-        return {'ruta': None, 'nombre_archivo': None,
-                'mensaje': 'No hay respuestas para exportar'}
+        return {'ruta': None, 'mensaje': 'No hay respuestas para exportar'}
 
     df = pd.DataFrame(filas, columns=columnas)
 
     # ============================================
-    # 4. GUARDAR CSV
+    # 4. GUARDAR
     # ============================================
     titulo_limpio = limpiar_nombre_archivo(encuesta.titulo)
-    nombre_archivo = (
-        f"completo_{encuesta_id}_{titulo_limpio}_"
-        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    )
+    nombre_archivo = f"completo_{encuesta_id}_{titulo_limpio}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
 
-    exports_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-        'exports'
-    )
+    exports_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'exports')
     os.makedirs(exports_dir, exist_ok=True)
-
     ruta_archivo = os.path.join(exports_dir, nombre_archivo)
 
     with open(ruta_archivo, 'w', encoding='utf-8-sig', newline='') as f:
         f.write(f"# METADATA: {json.dumps(metadata, ensure_ascii=False)}\n")
         df.to_csv(f, index=False)
 
-    # ---- Contadores ----
     cuantitativas = sum(1 for p in preguntas if p.tipo != 'texto_libre')
     cualitativas = sum(1 for p in preguntas if p.tipo == 'texto_libre')
-    con_otro = sum(
-        1 for p in preguntas
-        if p.tipo in ('opcion_unica', 'opcion_multiple') and _tiene_otro(p)
-    )
-
+    
     return {
         'ruta': ruta_archivo,
         'nombre_archivo': nombre_archivo,
@@ -210,11 +214,5 @@ def exportar_encuesta_completa(encuesta_id):
         'total_preguntas': len(preguntas),
         'cuantitativas': cuantitativas,
         'cualitativas': cualitativas,
-        'columnas_otro': con_otro,
-        'mensaje': (
-            f'✅ {len(df)} respuestas exportadas '
-            f'({cuantitativas} cuantitativas + {cualitativas} texto libre'
-            + (f' + {con_otro} textos de "Otro"' if con_otro else '')
-            + ')'
-        ),
+        'mensaje': f'✅ {len(df)} respuestas exportadas exitosamente',
     }
